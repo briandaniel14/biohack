@@ -8,6 +8,8 @@ source .venv/bin/activate (so you can use your terminal with the venv)
 
 crtl+shift+p -> select interpreter -> biohack
 
+pipx install uv
+
 uv sync
 uv run scripts/example.py
 
