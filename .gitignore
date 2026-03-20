@@ -1,0 +1,8 @@
+**/__pycache__
+**.pyc
+**/**.cpython-312.pyc
+.claude/
+.vscode/
+uv.lock
+.ruff_cache
+data/
