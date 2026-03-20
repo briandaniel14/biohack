@@ -5,3 +5,4 @@
 .vscode/
 uv.lock
 .ruff_cache
+notebooks/brian_analysis.ipynb
