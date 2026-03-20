@@ -11,17 +11,10 @@ readme = "README.md"
 requires-python = "==3.12.*"
 
 
-dependencies = []
+dependencies = ["pillow", "scikit-image", "numpy", "ipykernel"]
 
 [dependency-groups]
-dev = [
-    "poethepoet >=0.37",
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.13",
-    "mypy>=1.0.0",
-    "pre-commit>=4.4.0",
-]
+dev = ["poethepoet >=0.37", "ruff>=0.13", "pre-commit>=4.4.0", "matplotlib"]
 
 [tool.poe.tasks]
 format = "ruff format src tests"
