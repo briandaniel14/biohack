@@ -1,0 +1,31 @@
+# Lower intensity percentile to clip before normalization. Increasing this value filters out more of the dimmest pixel values, removing low-end noise but possibly suppressing faint filaments. Decreasing lets more background through, which may lead to noisier detection.
+clip_low_percentile: 0.0
+# Upper intensity percentile for normalization. Lowering this value clips more high-end pixels, reducing the effect of very bright spots; increasing includes more bright signal, possibly causing less contrast.
+clip_high_percentile: 100.0
+
+# The sigma for Gaussian blur applied to denoise the image. Higher values cause stronger smoothing, reducing noise but potentially blurring fine filament features. Lower values preserve detail but allow more noise.
+gaussian_sigma: 2.5
+
+# Percentile above which pixels are considered as foreground/possible filaments. Raising this value leads to more selective (fewer) pixels classified as filaments, potentially missing faint ones. Lowering it detects more filaments but may include more noise.
+foreground_percentile: 99.5
+
+# Size of the window (must be odd) used for adaptive thresholding. Larger values make the thresholding less sensitive to local variations, possibly missing tiny features. Smaller values increase sensitivity to local changes, at the risk of noise artifacts.
+local_block_size: 35
+# Offset subtracted from the local threshold. Making this more negative makes thresholding more permissive (includes more pixels as filaments), while less negative (even positive) excludes fainter structures.
+local_offset: -0.01
+
+# Scales used for the Frangi vesselness filter. Including more/larger values enhances filaments of various widths but may introduce artifacts if too wide relative to the image content.
+frangi_sigmas: [1.0, 2.0, 3.0]
+# Percentile threshold for Frangi filter output. Raising this keeps only the strongest filament features (more selective), while lowering retains weaker filament responses (less selective, possibly noisier).
+frangi_threshold_percentile: 99.5
+
+# Minimum number of pixels to retain a detected object as a filament. Higher values filter out small noise but may remove small/fragmented filaments; lower values might include more spurious detections.
+min_object_size: 25
+
+# Minimum pixels for calling a filament "present." Raising this makes detection more conservative, requiring larger features; lowering allows detection of smaller or fainter filaments as "present."
+min_pixels_for_presence: 20
+
+# Dots per inch used in output figures. Higher means larger, sharper images. Lower for faster rendering.
+figure_dpi: 140
+# Colormap used for displaying images. Typically "gray" for fluorescence microscopy. Switching changes visual appearance only.
+cmap: "gray"
