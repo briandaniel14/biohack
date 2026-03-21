@@ -65,7 +65,7 @@ export default function HyperparamPanel({ onChange }) {
               <label className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
                 {p.label}
                 <span
-                  className="text-gray-500 hover:text-green-400 cursor-help text-[10px] transition-colors"
+                  className="text-gray-500 hover:text-blue-400 cursor-help text-[10px] transition-colors"
                   onMouseEnter={e => showTooltip(e, p.desc)}
                   onMouseLeave={hideTooltip}
                 >ⓘ</span>
@@ -77,7 +77,7 @@ export default function HyperparamPanel({ onChange }) {
                 step={p.step}
                 value={values[p.key]}
                 onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleChange(p.key, v) }}
-                className="w-16 bg-gray-900 border border-gray-700 rounded-md px-2 py-0.5 text-xs font-mono text-gray-300 text-right focus:border-green-500 focus:outline-none transition-colors"
+                className="w-16 bg-gray-900 border border-gray-700 rounded-md px-2 py-0.5 text-xs font-mono text-gray-300 text-right focus:border-blue-500 focus:outline-none transition-colors"
               />
             </div>
             <input
@@ -87,7 +87,7 @@ export default function HyperparamPanel({ onChange }) {
               step={p.step}
               value={values[p.key]}
               onChange={e => handleChange(p.key, parseFloat(e.target.value))}
-              className="w-full accent-green-500 h-1.5"
+              className="w-full accent-blue-500 h-1.5"
             />
             <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
               <span>{p.min}</span>

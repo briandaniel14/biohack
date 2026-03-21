@@ -231,6 +231,16 @@ def _export_run_for_frontend(
     with open(ds_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
+    # Copy any CSV files from the pipeline run directory
+    import shutil as _shutil
+    for csv_file in run_dir.glob("*.csv"):
+        _shutil.copy2(str(csv_file), str(ds_dir / csv_file.name))
+    # Also check pipeline_output root for CSVs
+    po_dir = ds_dir / "pipeline_output"
+    if po_dir.exists():
+        for csv_file in po_dir.glob("*.csv"):
+            _shutil.copy2(str(csv_file), str(ds_dir / csv_file.name))
+
     # Update datasets.json
     datasets = _read_datasets()
     existing_ids = {d["id"] for d in datasets}
@@ -404,11 +414,47 @@ def api_delete_results(dataset_id: str):
         p = ds_dir / sub
         if p.is_dir():
             shutil.rmtree(p)
+    for csv_file in ds_dir.glob("*.csv"):
+        csv_file.unlink()
     summary = ds_dir / "summary.json"
     if summary.exists():
         summary.unlink()
 
     return jsonify({"ok": True})
+
+
+
+
+@app.route("/api/dataset/<dataset_id>/download", methods=["POST"])
+def api_download(dataset_id: str):
+    """Build a zip and place it in the dataset dir for static serving."""
+    import zipfile
+
+    body = request.get_json(silent=True) or {}
+    mode = body.get("mode", "results")
+    ds_dir = DATA_DIR / dataset_id
+    if not ds_dir.is_dir():
+        return jsonify({"error": "Dataset not found"}), 404
+
+    zip_name = f"{dataset_id}_{mode}.zip"
+    zip_path = ds_dir / zip_name
+
+    with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+        for csv_f in sorted(ds_dir.glob("*.csv")):
+            zf.write(csv_f, csv_f.name)
+        summary_p = ds_dir / "summary.json"
+        if summary_p.exists():
+            zf.write(summary_p, "summary.json")
+
+        if mode == "all":
+            for subdir in ("raw", "masks", "diagnostics"):
+                sub = ds_dir / subdir
+                if sub.is_dir():
+                    for fp in sorted(sub.iterdir()):
+                        if fp.is_file():
+                            zf.write(fp, f"{subdir}/{fp.name}")
+
+    return jsonify({"url": f"/data/{dataset_id}/{zip_name}"})
 
 
 # ---------------------------------------------------------------------------

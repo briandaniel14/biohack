@@ -76,7 +76,7 @@ export default function ProcessPage({
         {/* Upload area */}
         <div
           className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors flex flex-col items-center justify-center min-h-[140px] ${
-            dragOver ? 'border-green-400 bg-green-900/20' : 'border-gray-700 hover:border-gray-500'
+            dragOver ? 'border-blue-400 bg-blue-900/20' : 'border-gray-700 hover:border-gray-500'
           }`}
           onDragOver={e => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
@@ -105,7 +105,7 @@ export default function ProcessPage({
           ) : (
             <div>
               <div className="text-sm text-gray-400">
-                Drop .tif/.tiff here or <span className="text-green-400 underline">click to upload</span>
+                Drop .tif/.tiff here or <span className="text-blue-400 underline">click to upload</span>
               </div>
               <div className="text-xs text-gray-600 mt-1">100-frame grayscale TIFF stack</div>
             </div>
@@ -141,7 +141,7 @@ export default function ProcessPage({
                   type="checkbox"
                   checked={showAnnotated}
                   onChange={e => setShowAnnotated(e.target.checked)}
-                  className="accent-green-500"
+                  className="accent-blue-500"
                 />
                 <span className="text-xs">Show detections</span>
               </label>
@@ -160,12 +160,12 @@ export default function ProcessPage({
               max={FRAME_COUNT - 1}
               value={previewFrame}
               onChange={e => setPreviewFrame(parseInt(e.target.value))}
-              className="w-full accent-green-500"
+              className="w-full accent-blue-500"
             />
             {/* View Results button */}
             <button
               onClick={onNavigateResults}
-              className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
               disabled={!currentDataset}
             >
               View Results →
@@ -183,7 +183,7 @@ export default function ProcessPage({
           <button
             onClick={() => {/* TODO: POST hyperparams to backend and re-run pipeline */}}
             disabled={!currentDataset || processing}
-            className="w-full py-3 bg-green-700 hover:bg-green-600 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {processing ? (
               <><span className="inline-block animate-spin">⟳</span> Processing...</>

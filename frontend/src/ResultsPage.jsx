@@ -14,21 +14,23 @@ export default function ResultsPage({
   currentDataset,
   onNavigateTuning,
 }) {
-  const [measurements, setMeasurements] = useState([])
-  const [trackSummary, setTrackSummary] = useState([])
+  const [rows, setRows] = useState([])
+  const [filamentSummary, setFilamentSummary] = useState([])
   const [summary, setSummary] = useState(null)
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [viewMode, setViewMode] = useState('raw')
-  const [selectedTrackId, setSelectedTrackId] = useState(null)
+  const [selectedFilamentId, setSelectedFilamentId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loop, setLoop] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const [downloading, setDownloading] = useState(null)
 
   const timerRef = useRef(null)
   const preloadedRef = useRef({})
   const loopRef = useRef(false)
+  const chartsRef = useRef(null)
   useEffect(() => { loopRef.current = loop }, [loop])
 
   const frameCount = summary?.frame_count || 100
@@ -38,14 +40,14 @@ export default function ResultsPage({
     setLoading(true)
     setFrame(0)
     setPlaying(false)
-    setSelectedTrackId(null)
+    setSelectedFilamentId(null)
 
     Promise.all([
       loadDatasetData(currentDataset.id),
       loadDatasetSummary(currentDataset.id),
-    ]).then(([{ measurements: m, trackSummary: ts }, summ]) => {
-      setMeasurements(m)
-      setTrackSummary(ts)
+    ]).then(([{ rows: r, filamentSummary: fs }, summ]) => {
+      setRows(r)
+      setFilamentSummary(fs)
       setSummary(summ)
       setLoading(false)
     })
@@ -87,33 +89,85 @@ export default function ResultsPage({
     const clickX = (e.clientX - rect.left) * scaleX
     const clickY = (e.clientY - rect.top) * scaleY
 
-    const frameMeas = measurements.filter(m => m.frame === frame)
+    const frameRows = rows.filter(r => r.frame === frame)
     let bestDist = Infinity
-    let bestTrack = null
+    let bestFilament = null
 
-    for (const m of frameMeas) {
-      if (clickY >= m.bbox_min_row && clickY <= m.bbox_max_row &&
-          clickX >= m.bbox_min_col && clickX <= m.bbox_max_col) {
-        const dist = Math.hypot(clickX - m.centroid_x, clickY - m.centroid_y)
+    for (const r of frameRows) {
+      if (clickY >= r.bbox_min_row && clickY <= r.bbox_max_row &&
+          clickX >= r.bbox_min_col && clickX <= r.bbox_max_col) {
+        const dist = Math.hypot(clickX - r.centroid_x, clickY - r.centroid_y)
         if (dist < bestDist) {
           bestDist = dist
-          bestTrack = m.track_id
+          bestFilament = r.filament_ID
         }
       }
     }
-    if (bestTrack != null) setSelectedTrackId(bestTrack)
-  }, [measurements, frame, viewMode])
+    if (bestFilament != null) setSelectedFilamentId(bestFilament)
+  }, [rows, frame, viewMode])
 
   const jumpToFrame = useCallback((f) => {
     setFrame(Math.max(0, Math.min(frameCount - 1, f)))
     setPlaying(false)
   }, [frameCount])
 
+
+  const svgToPng = useCallback((svgEl) => {
+    return new Promise((resolve) => {
+      const rect = svgEl.getBoundingClientRect()
+      const w = Math.round(rect.width)
+      const h = Math.round(rect.height)
+      const clone = svgEl.cloneNode(true)
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      clone.setAttribute('width', w)
+      clone.setAttribute('height', h)
+      if (!clone.getAttribute('viewBox')) clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
+      const svgStr = new XMLSerializer().serializeToString(clone)
+      const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)))
+      const canvas = document.createElement('canvas')
+      const scale = 2
+      canvas.width = w * scale
+      canvas.height = h * scale
+      const ctx = canvas.getContext('2d')
+      ctx.scale(scale, scale)
+      const img = new Image()
+      img.onload = () => {
+        ctx.fillStyle = '#111827'
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
+        canvas.toBlob(resolve, 'image/png')
+      }
+      img.onerror = () => resolve(null)
+      img.src = dataUrl
+    })
+  }, [])
+
+  const handleDownload = useCallback(async (mode) => {
+    if (!currentDataset || downloading) return
+    setDownloading(mode)
+    try {
+      // Ask server to build the zip, get back the static URL
+      const resp = await fetch('/api/dataset/' + currentDataset.id + '/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      if (!resp.ok) throw new Error('Build zip failed')
+      const { url } = await resp.json()
+      // Open the static file URL — served by nginx, guaranteed complete
+      window.open(url, '_blank')
+    } catch (e) {
+      console.error('Download error:', e)
+    } finally {
+      setDownloading(null)
+    }
+  }, [currentDataset, downloading])
+
   if (!currentDataset) return (
     <div className="flex-1 flex items-center justify-center text-gray-500">
       <div className="text-center">
         <p className="text-lg mb-2">No dataset selected</p>
-        <button onClick={onNavigateTuning} className="text-sm text-green-400 hover:text-green-400">← Go to Tuning</button>
+        <button onClick={onNavigateTuning} className="text-sm text-blue-400 hover:text-blue-400">← Go to Tuning</button>
       </div>
     </div>
   )
@@ -159,7 +213,7 @@ export default function ResultsPage({
                   onClick={() => setViewMode(m.key)}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                     viewMode === m.key
-                      ? 'bg-green-700 text-white'
+                      ? 'bg-blue-700 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
                   }`}
                 >{m.label}</button>
@@ -174,7 +228,7 @@ export default function ResultsPage({
             max={frameCount - 1}
             value={frame}
             onChange={e => { setFrame(parseInt(e.target.value)); setPlaying(false) }}
-            className="w-full accent-green-500"
+            className="w-full accent-blue-500"
           />
 
           {/* Transport controls */}
@@ -188,7 +242,7 @@ export default function ResultsPage({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
             </button>
             <button onClick={() => setPlaying(!playing)}
-              className="px-5 py-1.5 bg-green-700 hover:bg-green-600 rounded-md text-sm font-medium w-[72px] text-center transition-colors">
+              className="px-5 py-1.5 bg-blue-700 hover:bg-blue-600 rounded-md text-sm font-medium w-[72px] text-center transition-colors">
               {playing ? 'Pause' : 'Play'}
             </button>
             <button onClick={() => jumpToFrame(frame + 1)}
@@ -196,7 +250,7 @@ export default function ResultsPage({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
             </button>
             <button onClick={() => setLoop(!loop)}
-              className={`p-1.5 rounded-md transition-colors ${loop ? 'bg-green-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`} title="Loop">
+              className={`p-1.5 rounded-md transition-colors ${loop ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`} title="Loop">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg>
             </button>
             <div className="ml-auto flex items-center gap-1 text-xs text-gray-500">
@@ -204,33 +258,66 @@ export default function ResultsPage({
                 <button
                   key={s}
                   onClick={() => setSpeed(s)}
-                  className={`px-2 py-0.5 rounded-md transition-colors ${speed === s ? 'bg-green-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
+                  className={`px-2 py-0.5 rounded-md transition-colors ${speed === s ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
                 >{s}×</button>
               ))}
             </div>
           </div>
 
-
+          {/* Dataset info */}
+          <div className="rounded-lg bg-gray-800/60 px-3 py-2 mt-1">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Dataset</p>
+            <p className="text-sm font-medium text-white truncate">{currentDataset.name || currentDataset.id}</p>
+          </div>
         </div>
       </div>
 
       {/* RIGHT: Track Inspector + Charts */}
       <div className="flex-1 min-w-0 flex flex-col">
+        {/* Run name */}
+        <div className="flex-none px-4 pt-3 pb-2 border-b border-gray-800 bg-gray-900/80">
+          <p className="text-sm text-gray-200 truncate px-3 py-1.5">{summary?.run_name || currentDataset.name}</p>
+        </div>
         <div className="flex-none border-b border-gray-800" style={{ height: '45%' }}>
           <TrackInspector
-            trackSummary={trackSummary}
-            measurements={measurements}
-            selectedTrackId={selectedTrackId}
-            onSelectTrack={setSelectedTrackId}
+            filamentSummary={filamentSummary}
+            rows={rows}
+            selectedFilamentId={selectedFilamentId}
+            onSelectFilament={setSelectedFilamentId}
             onJumpToFrame={jumpToFrame}
             currentFrame={frame}
           />
         </div>
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0" ref={chartsRef}>
           <MetricsDashboard
-            measurements={measurements}
-            trackSummary={trackSummary}
+            rows={rows}
+            filamentSummary={filamentSummary}
           />
+        </div>
+        {/* Download buttons */}
+        <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 flex gap-2">
+          <button
+            onClick={() => handleDownload('results')}
+            disabled={!!downloading}
+            className="flex-1 py-2.5 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {downloading === 'results' ? (
+              <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Preparing...</>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Download Results</>
+            )}
+          </button>
+          <button
+            onClick={() => handleDownload('all')}
+            disabled={!!downloading}
+            className="flex-1 py-2.5 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {downloading === 'all' ? (
+              <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Preparing...</>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Download All Files</>
+            )}
+          </button>
         </div>
       </div>
     </div>

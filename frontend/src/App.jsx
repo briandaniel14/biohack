@@ -18,6 +18,7 @@ export default function App() {
   // Pipeline job state — lives at App level so it persists across page nav
   const [pipelineRunning, setPipelineRunning] = useState(false)
   const [pipelineStep, setPipelineStep] = useState('')
+  const [pipelineDatasetId, setPipelineDatasetId] = useState(null)
   const pollRef = useRef(null)
 
   const navigateTo = (p) => {
@@ -46,6 +47,7 @@ export default function App() {
     if (pipelineRunning) return
     setPipelineRunning(true)
     setPipelineStep('Starting...')
+    setPipelineDatasetId(datasetId)
     try {
       const { job_id, error } = await runPipeline(datasetId, params)
       if (error) { setPipelineStep(`Error: ${error}`); setPipelineRunning(false); return }
@@ -57,14 +59,16 @@ export default function App() {
           pollRef.current = null
           setPipelineStep('Done!')
           setPipelineRunning(false)
+          setPipelineDatasetId(null)
           // Refresh datasets list so has_results updates
           loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
-          setTimeout(() => setPipelineStep(''), 6000)
+          setTimeout(() => setPipelineStep(''), 5000)
         } else if (status.status === 'error') {
           clearInterval(pollRef.current)
           pollRef.current = null
           setPipelineStep(`Error: ${status.error || 'Pipeline failed'}`)
           setPipelineRunning(false)
+          setPipelineDatasetId(null)
         } else {
           setPipelineStep(status.step || 'Processing...')
         }
@@ -72,6 +76,7 @@ export default function App() {
     } catch (e) {
       setPipelineStep(`Error: ${e.message}`)
       setPipelineRunning(false)
+      setPipelineDatasetId(null)
     }
   }, [pipelineRunning])
 
@@ -89,7 +94,7 @@ export default function App() {
               onClick={() => navigateTo(p.key)}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-sm font-medium transition-all ${
                 page === p.key
-                  ? 'bg-green-700 text-white shadow-sm shadow-green-700/25'
+                  ? 'bg-blue-700 text-white shadow-sm shadow-blue-700/25'
                   : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
               }`}
             >
@@ -100,6 +105,12 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {currentDataset && (
+          <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+            <span className="truncate max-w-[200px]">{currentDataset.name}</span>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {pipelineRunning && (
             <div className="flex items-center gap-1.5 text-xs text-green-400">
@@ -109,12 +120,6 @@ export default function App() {
           )}
           {!pipelineRunning && pipelineStep && (
             <div className="text-xs text-green-400">{pipelineStep}</div>
-          )}
-          {currentDataset && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              {currentDataset.name}
-            </div>
           )}
         </div>
       </header>
@@ -127,6 +132,9 @@ export default function App() {
           onSelectDataset={setCurrentDataset}
           onDatasetsChange={setDatasets}
           onNavigateTuning={() => navigateTo('tuning')}
+          pipelineRunning={pipelineRunning}
+          pipelineDatasetId={pipelineDatasetId}
+          pipelineStep={pipelineStep}
         />
       )}
       {page === 'tuning' && (

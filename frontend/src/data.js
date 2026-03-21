@@ -16,20 +16,56 @@ export async function loadDatasetSummary(datasetId) {
 
 export async function loadDatasetData(datasetId) {
   try {
-    const [measResp, summResp] = await Promise.all([
-      fetch(`/data/${datasetId}/structure_measurements.csv`),
-      fetch(`/data/${datasetId}/track_summary.csv`),
-    ])
-    if (!measResp.ok || !summResp.ok) return { measurements: [], trackSummary: [] }
-    const measText = await measResp.text()
-    const summText = await summResp.text()
-    const measurements = Papa.parse(measText, { header: true, dynamicTyping: true }).data
+    const resp = await fetch(`/data/${datasetId}/cell_tracks.csv`)
+    if (!resp.ok) return { rows: [], filamentSummary: [] }
+    const text = await resp.text()
+    const rows = Papa.parse(text, { header: true, dynamicTyping: true }).data
       .filter(r => r.frame != null)
-    const trackSummary = Papa.parse(summText, { header: true, dynamicTyping: true }).data
-      .filter(r => r.track_id != null)
-    return { measurements, trackSummary }
+
+    // Derive filament summary (one entry per filament_ID)
+    const filMap = new Map()
+    for (const r of rows) {
+      if (r.filament_present !== 1 || r.filament_ID == null || r.filament_ID === '') continue
+      const fid = r.filament_ID
+      if (!filMap.has(fid)) {
+        filMap.set(fid, {
+          filament_ID: fid,
+          host_cell_ID: r.cell_ID,
+          first_frame: r.frame,
+          last_frame: r.frame,
+          frame_count: 0,
+          time_of_appearance: r.time_of_appearance,
+          _lengths: [],
+          _areas: [],
+          _eccs: [],
+        })
+      }
+      const f = filMap.get(fid)
+      f.last_frame = Math.max(f.last_frame, r.frame)
+      f.first_frame = Math.min(f.first_frame, r.frame)
+      f.frame_count++
+      if (r.filament_mean_length_px != null) f._lengths.push(r.filament_mean_length_px)
+      if (r.filament_area != null) f._areas.push(r.filament_area)
+      if (r.filament_eccentricity != null) f._eccs.push(r.filament_eccentricity)
+    }
+    const filamentSummary = [...filMap.values()].map(f => {
+      f.avg_length = f._lengths.length > 0
+        ? +(f._lengths.reduce((a, b) => a + b, 0) / f._lengths.length).toFixed(1)
+        : 0
+      f.max_length = f._lengths.length > 0 ? +Math.max(...f._lengths).toFixed(1) : 0
+      f.avg_area = f._areas.length > 0
+        ? +( f._areas.reduce((a, b) => a + b, 0) / f._areas.length).toFixed(1)
+        : 0
+      f.avg_eccentricity = f._eccs.length > 0
+        ? +(f._eccs.reduce((a, b) => a + b, 0) / f._eccs.length).toFixed(2)
+        : 0
+      delete f._lengths; delete f._areas; delete f._eccs
+      return f
+    }).sort((a, b) => a.filament_ID - b.filament_ID)
+
+    return { rows, filamentSummary }
   } catch {
-    return { measurements: [], trackSummary: [] }
+    return { rows: [], filamentSummary: [] }
   }
 }
 
@@ -57,8 +93,8 @@ const TRACK_COLORS = [
   '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5',
 ]
 
-export function getTrackColor(trackId) {
-  return TRACK_COLORS[(trackId - 1) % TRACK_COLORS.length]
+export function getTrackColor(id) {
+  return TRACK_COLORS[((id || 1) - 1) % TRACK_COLORS.length]
 }
 
 export async function uploadTifFile(file) {

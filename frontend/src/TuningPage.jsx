@@ -98,7 +98,7 @@ export default function TuningPage({
     <div className="flex-1 flex items-center justify-center text-gray-500">
       <div className="text-center">
         <p className="text-lg mb-2">No dataset selected</p>
-        <button onClick={onNavigateUpload} className="text-sm text-green-400 hover:text-green-400">
+        <button onClick={onNavigateUpload} className="text-sm text-blue-400 hover:text-blue-400">
           ← Go to Upload
         </button>
       </div>
@@ -146,7 +146,7 @@ export default function TuningPage({
                   onClick={() => setViewMode(m.key)}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                     viewMode === m.key
-                      ? 'bg-green-700 text-white'
+                      ? 'bg-blue-700 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
                   }`}
                 >{m.label}</button>
@@ -161,7 +161,7 @@ export default function TuningPage({
             max={frameCount - 1}
             value={frame}
             onChange={e => { setFrame(parseInt(e.target.value)); setPlaying(false) }}
-            className="w-full accent-green-500"
+            className="w-full accent-blue-500"
           />
 
           {/* Transport controls */}
@@ -175,7 +175,7 @@ export default function TuningPage({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
             </button>
             <button onClick={() => setPlaying(!playing)}
-              className="px-5 py-1.5 bg-green-700 hover:bg-green-600 rounded-md text-sm font-medium w-[72px] text-center transition-colors">
+              className="px-5 py-1.5 bg-blue-700 hover:bg-blue-600 rounded-md text-sm font-medium w-[72px] text-center transition-colors">
               {playing ? 'Pause' : 'Play'}
             </button>
             <button onClick={() => jumpToFrame(frame + 1)}
@@ -183,7 +183,7 @@ export default function TuningPage({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
             </button>
             <button onClick={() => setLoop(!loop)}
-              className={`p-1.5 rounded-md transition-colors ${loop ? 'bg-green-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`}
+              className={`p-1.5 rounded-md transition-colors ${loop ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700'}`}
               title="Loop">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg>
             </button>
@@ -192,20 +192,31 @@ export default function TuningPage({
                 <button
                   key={s}
                   onClick={() => setSpeed(s)}
-                  className={`px-2 py-0.5 rounded-md transition-colors ${speed === s ? 'bg-green-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
+                  className={`px-2 py-0.5 rounded-md transition-colors ${speed === s ? 'bg-blue-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
                 >{s}×</button>
               ))}
             </div>
           </div>
 
-          {/* Run name */}
-          <div className="flex items-center gap-2 pt-1">
+          {/* Dataset info */}
+          <div className="rounded-lg bg-gray-800/60 px-3 py-2 mt-1">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Dataset</p>
+            <p className="text-sm font-medium text-white truncate">{currentDataset.name || currentDataset.id}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT: Hyperparameters + Actions */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Run name */}
+        <div className="flex-none px-4 pt-3 pb-2 border-b border-gray-800 bg-gray-900/80">
+          <div className="flex items-center gap-2">
             <input
               type="text"
               placeholder="Name this run..."
               value={runName}
               onChange={e => setRunName(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:border-green-500 focus:outline-none transition-colors"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
             />
             <button
               onClick={async () => {
@@ -217,10 +228,6 @@ export default function TuningPage({
             >Save</button>
           </div>
         </div>
-      </div>
-
-      {/* RIGHT: Hyperparameters + Actions */}
-      <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 min-h-0 overflow-hidden">
           <HyperparamPanel onChange={vals => { paramsRef.current = vals }} />
         </div>
@@ -229,11 +236,19 @@ export default function TuningPage({
         <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 space-y-2">
           <button
             onClick={handleRunPipeline}
-            disabled={pipelineRunning}
-            className="w-full py-2.5 rounded-lg bg-green-700 hover:bg-green-600 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={pipelineRunning || (!pipelineRunning && pipelineStep === 'Done!')}
+            className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+              !pipelineRunning && pipelineStep === 'Done!'
+                ? 'bg-green-600 text-white'
+                : pipelineRunning
+                  ? 'bg-blue-700 opacity-40'
+                  : 'bg-blue-700 hover:bg-blue-600'
+            }`}
           >
             {pipelineRunning ? (
               <><svg className="inline-block w-4 h-4 animate-spin mr-1.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>{pipelineStep}</>
+            ) : !pipelineRunning && pipelineStep === 'Done!' ? (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Done</>
             ) : (
               <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Run Pipeline</>
             )}

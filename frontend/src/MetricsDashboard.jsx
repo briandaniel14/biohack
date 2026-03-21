@@ -1,78 +1,82 @@
 import { useMemo } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, ReferenceLine, Legend,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from 'recharts'
-import { FRAME_COUNT, getTrackColor } from './data.js'
+import { getTrackColor } from './data.js'
 
 const TT = {
   background: '#1f2937', border: 'none', fontSize: 10, padding: '4px 8px', borderRadius: 4
 }
 
-export default function MetricsDashboard({ measurements, trackSummary }) {
-  const trackIds = useMemo(() => {
-    return [...new Set(trackSummary.map(t => t.track_id))].sort((a, b) => a - b)
-  }, [trackSummary])
+export default function MetricsDashboard({ rows, filamentSummary }) {
+  const frames = useMemo(() => {
+    if (!rows.length) return []
+    const maxF = Math.max(...rows.map(r => r.frame))
+    return Array.from({ length: maxF + 1 }, (_, i) => i)
+  }, [rows])
 
-  // 1. Length of all filaments over time (major_axis per track per frame) + max hlines
+  const filamentIds = useMemo(() => {
+    return filamentSummary.map(f => f.filament_ID)
+  }, [filamentSummary])
+
+  // Chart 1: Filament length over time (per filament_ID) with max reference lines
   const lengthData = useMemo(() => {
-    const data = []
-    for (let f = 0; f < FRAME_COUNT; f++) {
+    return frames.map(f => {
       const row = { frame: f }
-      measurements.filter(m => m.frame === f).forEach(m => {
-        row[`t${m.track_id}`] = m.major_axis
+      rows.filter(r => r.frame === f && r.filament_present === 1 && r.filament_ID != null).forEach(r => {
+        row[`f${r.filament_ID}`] = r.filament_mean_length_px
       })
-      data.push(row)
-    }
-    return data
-  }, [measurements])
+      return row
+    })
+  }, [rows, frames])
 
   const maxLengths = useMemo(() => {
-    return trackIds.map(tid => {
-      const vals = measurements.filter(m => m.track_id === tid).map(m => m.major_axis)
-      return { tid, max: vals.length > 0 ? Math.max(...vals) : 0 }
+    return filamentIds.map(fid => {
+      const vals = rows
+        .filter(r => r.filament_ID === fid && r.filament_mean_length_px != null)
+        .map(r => r.filament_mean_length_px)
+      return { fid, max: vals.length > 0 ? Math.max(...vals) : 0 }
     }).filter(v => v.max > 0)
-  }, [measurements, trackIds])
+  }, [rows, filamentIds])
 
-  // 2. Filaments per timepoint
+  // Chart 2: Filaments per frame (count of rows where filament_present=1)
   const countData = useMemo(() => {
-    const data = []
-    for (let f = 0; f < FRAME_COUNT; f++) {
-      data.push({ frame: f, count: measurements.filter(m => m.frame === f).length })
-    }
-    return data
-  }, [measurements])
+    return frames.map(f => {
+      const frameRows = rows.filter(r => r.frame === f)
+      return {
+        frame: f,
+        filaments: frameRows.filter(r => r.filament_present === 1).length,
+        cells: frameRows.length,
+      }
+    })
+  }, [rows, frames])
 
-  // 3. Eccentricity over time per track
+  // Chart 3: Filament area over time (per filament_ID)
+  const areaData = useMemo(() => {
+    return frames.map(f => {
+      const row = { frame: f }
+      rows.filter(r => r.frame === f && r.filament_present === 1 && r.filament_ID != null).forEach(r => {
+        row[`f${r.filament_ID}`] = r.filament_area
+      })
+      return row
+    })
+  }, [rows, frames])
+
+  // Chart 4: Filament eccentricity over time (per filament_ID)
   const eccData = useMemo(() => {
-    const data = []
-    for (let f = 0; f < FRAME_COUNT; f++) {
+    return frames.map(f => {
       const row = { frame: f }
-      measurements.filter(m => m.frame === f).forEach(m => {
-        row[`t${m.track_id}`] = m.eccentricity
+      rows.filter(r => r.frame === f && r.filament_present === 1 && r.filament_ID != null).forEach(r => {
+        row[`f${r.filament_ID}`] = r.filament_eccentricity
       })
-      data.push(row)
-    }
-    return data
-  }, [measurements])
-
-  // 4. Major & minor axis over time per track
-  const axisData = useMemo(() => {
-    const data = []
-    for (let f = 0; f < FRAME_COUNT; f++) {
-      const row = { frame: f }
-      measurements.filter(m => m.frame === f).forEach(m => {
-        row[`maj_t${m.track_id}`] = m.major_axis
-        row[`min_t${m.track_id}`] = m.minor_axis
-      })
-      data.push(row)
-    }
-    return data
-  }, [measurements])
+      return row
+    })
+  }, [rows, frames])
 
   return (
     <div className="grid grid-cols-2 grid-rows-2 gap-1 p-2 h-full">
-      {/* Chart 1: Length over time with max hlines */}
+      {/* Chart 1: Filament length with max reference lines */}
       <ChartPanel title="Filament Length Over Time (with max lines)">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={lengthData}>
@@ -80,57 +84,54 @@ export default function MetricsDashboard({ measurements, trackSummary }) {
             <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} label={{ value: 'px', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#9ca3af' } }} />
             <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
-            {trackIds.map(tid => (
-              <Line key={tid} type="monotone" dataKey={`t${tid}`} stroke={getTrackColor(tid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Track ${tid}`} />
+            {filamentIds.map(fid => (
+              <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
             ))}
-            {maxLengths.map(({ tid, max }) => (
-              <ReferenceLine key={`max-${tid}`} y={max} stroke={getTrackColor(tid)} strokeDasharray="4 2" strokeWidth={1} strokeOpacity={0.5} />
+            {maxLengths.map(({ fid, max }) => (
+              <ReferenceLine key={`max-${fid}`} y={max} stroke={getTrackColor(fid)} strokeDasharray="4 2" strokeWidth={1} strokeOpacity={0.5} />
             ))}
           </LineChart>
         </ResponsiveContainer>
       </ChartPanel>
 
-      {/* Chart 2: Filaments per timepoint */}
-      <ChartPanel title="Filaments Per Timepoint">
+      {/* Chart 2: Filaments per frame */}
+      <ChartPanel title="Filaments Per Frame">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={countData}>
+          <BarChart data={countData} barGap={0}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} allowDecimals={false} />
             <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
-            <Line type="stepAfter" dataKey="count" stroke="#60a5fa" dot={false} strokeWidth={1.5} name="Count" />
+            <Bar dataKey="filaments" fill="#60a5fa" name="Filaments" />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartPanel>
+
+      {/* Chart 3: Filament area */}
+      <ChartPanel title="Filament Area Over Time">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={areaData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} />
+            <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} label={{ value: 'px²', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#9ca3af' } }} />
+            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
+            {filamentIds.map(fid => (
+              <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </ChartPanel>
 
-      {/* Chart 3: Eccentricity */}
-      <ChartPanel title="Eccentricity Over Time (0 = round, 1 = elongated)">
+      {/* Chart 4: Filament eccentricity */}
+      <ChartPanel title="Filament Eccentricity Over Time">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={eccData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} domain={[0, 1]} />
             <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
-            {trackIds.map(tid => (
-              <Line key={tid} type="monotone" dataKey={`t${tid}`} stroke={getTrackColor(tid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Track ${tid}`} />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-
-      {/* Chart 4: Major and Minor axis */}
-      <ChartPanel title="Major & Minor Axis Length Over Time">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={axisData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} />
-            <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} label={{ value: 'px', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#9ca3af' } }} />
-            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
-            {trackIds.map(tid => (
-              <Line key={`maj-${tid}`} type="monotone" dataKey={`maj_t${tid}`} stroke={getTrackColor(tid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`T${tid} major`} />
-            ))}
-            {trackIds.map(tid => (
-              <Line key={`min-${tid}`} type="monotone" dataKey={`min_t${tid}`} stroke={getTrackColor(tid)} dot={false} strokeWidth={1} strokeDasharray="4 2" connectNulls={false} name={`T${tid} minor`} />
+            {filamentIds.map(fid => (
+              <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
             ))}
           </LineChart>
         </ResponsiveContainer>

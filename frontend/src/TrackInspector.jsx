@@ -1,47 +1,44 @@
 import { useState, useMemo } from 'react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { getTrackColor, frameToTimestamp } from './data.js'
 
 const SORT_KEYS = [
-  { key: 'track_id', label: 'ID' },
-  { key: 'morphology_label', label: 'Morph' },
-  { key: 'lifetime_frames', label: 'Lifetime' },
-  { key: 'formation_frame', label: 'Start' },
-  { key: 'max_length', label: 'Max Len' },
+  { key: 'filament_ID', label: 'Fil ID' },
+  { key: 'host_cell_ID', label: 'Cell' },
+  { key: 'frame_count', label: 'Frames' },
+  { key: 'avg_length', label: 'Avg Len' },
+  { key: 'time_of_appearance', label: 'Appears' },
 ]
 
 export default function TrackInspector({
-  trackSummary,
-  measurements,
-  selectedTrackId,
-  onSelectTrack,
+  filamentSummary,
+  rows,
+  selectedFilamentId,
+  onSelectFilament,
   onJumpToFrame,
   currentFrame,
 }) {
-  const [sortKey, setSortKey] = useState('track_id')
+  const [sortKey, setSortKey] = useState('filament_ID')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const sortedTracks = useMemo(() => {
-    const sorted = [...trackSummary].sort((a, b) => {
-      const va = a[sortKey]
-      const vb = b[sortKey]
-      if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va)
+  const sortedFilaments = useMemo(() => {
+    return [...filamentSummary].sort((a, b) => {
+      const va = a[sortKey] ?? 0
+      const vb = b[sortKey] ?? 0
       return sortAsc ? va - vb : vb - va
     })
-    return sorted
-  }, [trackSummary, sortKey, sortAsc])
+  }, [filamentSummary, sortKey, sortAsc])
 
-  const selectedTrack = useMemo(
-    () => trackSummary.find(t => t.track_id === selectedTrackId),
-    [trackSummary, selectedTrackId]
+  const selectedFilament = useMemo(
+    () => filamentSummary.find(f => f.filament_ID === selectedFilamentId),
+    [filamentSummary, selectedFilamentId]
   )
 
-  const selectedTrackMeasurements = useMemo(() => {
-    if (selectedTrackId == null) return []
-    return measurements
-      .filter(m => m.track_id === selectedTrackId)
+  const selectedFilRows = useMemo(() => {
+    if (selectedFilamentId == null) return []
+    return rows
+      .filter(r => r.filament_ID === selectedFilamentId && r.filament_present === 1)
       .sort((a, b) => a.frame - b.frame)
-  }, [measurements, selectedTrackId])
+  }, [rows, selectedFilamentId])
 
   const handleSort = (key) => {
     if (key === sortKey) setSortAsc(!sortAsc)
@@ -51,10 +48,10 @@ export default function TrackInspector({
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 bg-gray-900 text-xs font-semibold text-white uppercase tracking-wide border-b border-gray-800">
-        Track Inspector — {trackSummary.length} tracks
+        Filament Tracker — {filamentSummary.length} filaments
       </div>
 
-      {/* Track table */}
+      {/* Filament table */}
       <div className="flex-1 overflow-auto min-h-0">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-gray-900 z-10">
@@ -71,32 +68,24 @@ export default function TrackInspector({
             </tr>
           </thead>
           <tbody>
-            {sortedTracks.map(t => {
-              const isActive = currentFrame >= t.formation_frame && currentFrame <= t.dissolution_frame
+            {sortedFilaments.map(f => {
+              const isActive = currentFrame >= f.first_frame && currentFrame <= f.last_frame
               return (
                 <tr
-                  key={t.track_id}
-                  onClick={() => onSelectTrack(t.track_id)}
+                  key={f.filament_ID}
+                  onClick={() => onSelectFilament(f.filament_ID)}
                   className={`cursor-pointer border-b border-gray-800/50 hover:bg-gray-800 ${
-                    t.track_id === selectedTrackId ? 'bg-green-900/40' : ''
+                    f.filament_ID === selectedFilamentId ? 'bg-blue-900/40' : ''
                   } ${isActive ? '' : 'opacity-50'}`}
                 >
                   <td className="px-2 py-1">
-                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: getTrackColor(t.track_id) }} />
-                    {t.track_id}
+                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: getTrackColor(f.filament_ID) }} />
+                    {Math.round(f.filament_ID)}
                   </td>
-                  <td className="px-2 py-1">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      t.morphology_label === 'filament' ? 'bg-green-900 text-green-300' :
-                      t.morphology_label === 'condensate' ? 'bg-purple-900 text-purple-300' :
-                      'bg-yellow-900 text-yellow-300'
-                    }`}>
-                      {t.morphology_label}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1 font-mono">{t.lifetime_frames}f</td>
-                  <td className="px-2 py-1 font-mono">{t.formation_frame}</td>
-                  <td className="px-2 py-1 font-mono">{t.max_length?.toFixed(1)}</td>
+                  <td className="px-2 py-1 font-mono text-gray-400">{f.host_cell_ID}</td>
+                  <td className="px-2 py-1 font-mono">{f.frame_count}</td>
+                  <td className="px-2 py-1 font-mono">{f.avg_length}px</td>
+                  <td className="px-2 py-1 font-mono">f{Math.round(f.time_of_appearance || f.first_frame)}</td>
                 </tr>
               )
             })}
@@ -104,24 +93,20 @@ export default function TrackInspector({
         </table>
       </div>
 
-      {/* Selected track detail */}
-      {selectedTrack && (
+      {/* Selected filament detail */}
+      {selectedFilament && (
         <div className="flex-none border-t border-gray-800 bg-gray-900/50 p-3 overflow-auto" style={{ maxHeight: 260 }}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: getTrackColor(selectedTrack.track_id) }} />
-              <span className="font-semibold text-sm">Track {selectedTrack.track_id}</span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                selectedTrack.morphology_label === 'filament' ? 'bg-green-900 text-green-300' :
-                selectedTrack.morphology_label === 'condensate' ? 'bg-purple-900 text-purple-300' :
-                'bg-yellow-900 text-yellow-300'
-              }`}>
-                {selectedTrack.morphology_label}
+              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: getTrackColor(selectedFilament.filament_ID) }} />
+              <span className="font-semibold text-sm">Filament {Math.round(selectedFilament.filament_ID)}</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900 text-blue-300">
+                in Cell {selectedFilament.host_cell_ID}
               </span>
             </div>
             <button
-              onClick={() => onJumpToFrame(selectedTrack.formation_frame)}
-              className="px-2 py-0.5 bg-green-700 hover:bg-green-600 rounded text-xs"
+              onClick={() => onJumpToFrame(selectedFilament.first_frame)}
+              className="px-2 py-0.5 bg-blue-700 hover:bg-blue-600 rounded text-xs"
             >
               Jump to start
             </button>
@@ -129,61 +114,56 @@ export default function TrackInspector({
 
           <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-3">
             <div>
-              <span className="text-gray-500">Lifetime:</span>{' '}
-              <span className="font-mono">{selectedTrack.lifetime_frames}f ({selectedTrack.lifetime_minutes?.toFixed(0)}min)</span>
-            </div>
-            <div>
               <span className="text-gray-500">Frames:</span>{' '}
-              <span className="font-mono">{selectedTrack.formation_frame} → {selectedTrack.dissolution_frame}</span>
+              <span className="font-mono">{selectedFilament.first_frame} → {selectedFilament.last_frame}</span>
             </div>
             <div>
-              <span className="text-gray-500">Transitions:</span>{' '}
-              <span className="font-mono">{selectedTrack.num_transitions}</span>
+              <span className="text-gray-500">Lifetime:</span>{' '}
+              <span className="font-mono">{selectedFilament.frame_count} frames</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Appeared:</span>{' '}
+              <span className="font-mono">{frameToTimestamp(selectedFilament.time_of_appearance || selectedFilament.first_frame)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Avg length:</span>{' '}
+              <span className="font-mono">{selectedFilament.avg_length}px</span>
             </div>
             <div>
               <span className="text-gray-500">Max length:</span>{' '}
-              <span className="font-mono">{selectedTrack.max_length?.toFixed(1)}px</span>
+              <span className="font-mono">{selectedFilament.max_length}px</span>
             </div>
             <div>
-              <span className="text-gray-500">Init morph:</span>{' '}
-              <span className="font-mono">{selectedTrack.initial_morphology}</span>
+              <span className="text-gray-500">Avg area:</span>{' '}
+              <span className="font-mono">{selectedFilament.avg_area}px²</span>
             </div>
             <div>
-              <span className="text-gray-500">Final morph:</span>{' '}
-              <span className="font-mono">{selectedTrack.final_morphology}</span>
+              <span className="text-gray-500">Eccentricity:</span>{' '}
+              <span className="font-mono">{selectedFilament.avg_eccentricity}</span>
             </div>
           </div>
 
-          {/* Mini sparklines */}
-          {selectedTrackMeasurements.length > 1 && (
-            <div className="grid grid-cols-3 gap-2">
-              <MiniChart data={selectedTrackMeasurements} dataKey="major_axis" label="Length" color="#60a5fa" />
-              <MiniChart data={selectedTrackMeasurements} dataKey="mean_intensity" label="Intensity" color="#f59e0b" />
-              <MiniChart data={selectedTrackMeasurements} dataKey="eccentricity" label="Eccentricity" color="#a78bfa" />
+          {/* Frame-by-frame appearances */}
+          <div className="mt-2">
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Frame Appearances</div>
+            <div className="flex flex-wrap gap-1">
+              {selectedFilRows.map(r => (
+                <button
+                  key={r.frame}
+                  onClick={() => onJumpToFrame(r.frame)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                    r.frame === currentFrame
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-blue-900/60 hover:bg-blue-800 text-blue-300'
+                  }`}
+                >
+                  f{r.frame} — {Number(r.filament_mean_length_px).toFixed(1)}px
+                </button>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function MiniChart({ data, dataKey, label, color }) {
-  return (
-    <div>
-      <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
-      <ResponsiveContainer width="100%" height={50}>
-        <LineChart data={data}>
-          <XAxis dataKey="frame" hide />
-          <YAxis hide domain={['auto', 'auto']} />
-          <Tooltip
-            contentStyle={{ background: '#1f2937', border: 'none', fontSize: 10, padding: '4px 8px' }}
-            labelFormatter={v => `Frame ${v}`}
-            formatter={v => [typeof v === 'number' ? v.toFixed(2) : v, label]}
-          />
-          <Line type="monotone" dataKey={dataKey} stroke={color} dot={false} strokeWidth={1.5} />
-        </LineChart>
-      </ResponsiveContainer>
     </div>
   )
 }
