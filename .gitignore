@@ -9,3 +9,13 @@ notebooks/brian_analysis.ipynb
 outputs/
 
 .venv/
+.DS_Store
+data/ch20_URA7_URA8_001-crop1/frames/
+data/ch20_URA7_URA8_001-crop2/frames/
+data/ch20_URA7_URA8_001-crop3/frames/
+data/ch20_URA7_URA8_002-crop1/frames/
+data/ch20_URA7_URA8_002-crop2/frames/
+data/ch20_URA7_URA8_002-crop3/frames/
+data/ch20_URA7_URA8_002-crop4/frames/
+data/ch20_URA7_URA8_002-crop5/frames/
+data/ch20_URA7_URA8_002-crop6/frames/
