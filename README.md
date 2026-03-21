@@ -1,6 +1,14 @@
 # biohack
 
-## Usage: 
+## Description of code:
+
+CellPose was used to detect cells. 
+
+## Use of LLMs:
+
+Claude was used to generate code for website UI. 
+
+## Setup: 
 
 git clone https://github.com/briandaniel14/biohack
 
