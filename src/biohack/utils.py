@@ -2,6 +2,15 @@ import numpy as np
 from PIL import Image
 from IPython.display import display
 from pathlib import Path
+import yaml
+
+def read_yaml(path: str | Path) -> dict:
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+def write_yaml(data: dict, path: str | Path) -> None:
+    with open(path, "w") as f:
+        yaml.dump(data, f)
 
 
 def load_tiffs(tiff_paths: list[str]) -> list[list[np.array]]:
