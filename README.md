@@ -2,11 +2,13 @@
 
 ## Description of code:
 
-CellPose was used to detect cells. 
+CellPose was used to detect cells. Visual processing 
+
+
 
 ## Use of LLMs:
 
-Claude was used to generate code for website UI. 
+Claude was used to generate code for website UI. ChatGTP assisted with CellPose coding.
 
 ## Setup: 
 
