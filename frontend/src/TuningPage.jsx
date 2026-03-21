@@ -208,15 +208,19 @@ export default function TuningPage({
 
       {/* RIGHT: Hyperparameters + Actions */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Run name */}
-        <div className="flex-none px-4 pt-3 pb-2 border-b border-gray-800 bg-gray-900/80">
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <HyperparamPanel onChange={vals => { paramsRef.current = vals }} />
+        </div>
+
+        {/* Bottom actions */}
+        <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 space-y-2">
           <div className="flex items-center gap-2">
             <input
               type="text"
               placeholder="Name this run..."
               value={runName}
               onChange={e => setRunName(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm leading-none text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
             />
             <button
               onClick={async () => {
@@ -224,31 +228,24 @@ export default function TuningPage({
                 await saveRunName(currentDataset.id, runName.trim())
               }}
               disabled={!runName.trim()}
-              className="px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed leading-none"
             >Save</button>
           </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <HyperparamPanel onChange={vals => { paramsRef.current = vals }} />
-        </div>
-
-        {/* Bottom actions */}
-        <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 space-y-2">
           <button
             onClick={handleRunPipeline}
-            disabled={pipelineRunning || (!pipelineRunning && pipelineStep === 'Done!')}
+            disabled={pipelineRunning}
             className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-              !pipelineRunning && pipelineStep === 'Done!'
-                ? 'bg-green-600 text-white'
-                : pipelineRunning
-                  ? 'bg-blue-700 opacity-40'
+              pipelineRunning
+                ? 'bg-blue-700 opacity-40'
+                : pipelineStep === 'Done!'
+                  ? 'bg-green-600 text-white'
                   : 'bg-blue-700 hover:bg-blue-600'
             }`}
           >
             {pipelineRunning ? (
               <><svg className="inline-block w-4 h-4 animate-spin mr-1.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>{pipelineStep}</>
-            ) : !pipelineRunning && pipelineStep === 'Done!' ? (
-              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Done</>
+            ) : pipelineStep === 'Done!' ? (
+              <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Done!</>
             ) : (
               <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Run Pipeline</>
             )}

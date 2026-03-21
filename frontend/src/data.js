@@ -2,6 +2,7 @@ import Papa from 'papaparse'
 
 const FRAME_COUNT = 100
 const FRAME_INTERVAL_MIN = 14.4
+const PX_TO_UM = 0.3
 
 export async function loadDatasets() {
   const resp = await fetch('/api/datasets')
@@ -50,11 +51,11 @@ export async function loadDatasetData(datasetId) {
     }
     const filamentSummary = [...filMap.values()].map(f => {
       f.avg_length = f._lengths.length > 0
-        ? +(f._lengths.reduce((a, b) => a + b, 0) / f._lengths.length).toFixed(1)
+        ? +(f._lengths.reduce((a, b) => a + b, 0) / f._lengths.length * PX_TO_UM).toFixed(2)
         : 0
-      f.max_length = f._lengths.length > 0 ? +Math.max(...f._lengths).toFixed(1) : 0
+      f.max_length = f._lengths.length > 0 ? +(Math.max(...f._lengths) * PX_TO_UM).toFixed(2) : 0
       f.avg_area = f._areas.length > 0
-        ? +( f._areas.reduce((a, b) => a + b, 0) / f._areas.length).toFixed(1)
+        ? +(f._areas.reduce((a, b) => a + b, 0) / f._areas.length * PX_TO_UM * PX_TO_UM).toFixed(2)
         : 0
       f.avg_eccentricity = f._eccs.length > 0
         ? +(f._eccs.reduce((a, b) => a + b, 0) / f._eccs.length).toFixed(2)
@@ -137,4 +138,4 @@ export async function pollJobStatus(jobId) {
   return resp.json()
 }
 
-export { FRAME_COUNT, FRAME_INTERVAL_MIN }
+export { FRAME_COUNT, FRAME_INTERVAL_MIN, PX_TO_UM }

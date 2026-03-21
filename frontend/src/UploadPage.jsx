@@ -7,6 +7,8 @@ export default function UploadPage({
   onSelectDataset,
   onDatasetsChange,
   onNavigateTuning,
+  onNavigateResults,
+  pipelineJobs,
   pipelineRunning,
   pipelineDatasetId,
   pipelineStep,
@@ -91,7 +93,7 @@ export default function UploadPage({
           </div>
           <div className="p-5">
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[120px] ${
                 dragOver
                   ? 'border-blue-400 bg-blue-400/10'
                   : 'border-gray-700 hover:border-gray-500 hover:bg-gray-800/40'
@@ -113,23 +115,25 @@ export default function UploadPage({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
                 </svg>
               </div>
-              {uploadStatus ? (
-                <div className={`text-sm font-medium ${
-                  uploadStatus.state === 'error' ? 'text-red-400' :
-                  uploadStatus.state === 'done' ? 'text-green-400' :
-                  'text-green-400'
-                }`}>
-                  {uploadStatus.state === 'processing' && <svg className="inline-block w-4 h-4 animate-spin mr-1.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>}
-                  {uploadStatus.message}
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-300">
-                    Drop .tif/.tiff here or <span className="text-blue-400 hover:text-blue-400 underline underline-offset-2">browse</span>
-                  </p>
-                  <p className="text-xs text-gray-600 mt-1">Accepted formats: .tif, .tiff</p>
-                </>
-              )}
+              <div className="min-h-[44px] flex flex-col items-center justify-center">
+                {uploadStatus ? (
+                  <div className={`text-sm font-medium ${
+                    uploadStatus.state === 'error' ? 'text-red-400' :
+                    uploadStatus.state === 'done' ? 'text-green-400' :
+                    'text-green-400'
+                  }`}>
+                    {uploadStatus.state === 'processing' && <svg className="inline-block w-4 h-4 animate-spin mr-1.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>}
+                    {uploadStatus.message}
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-300">
+                      Drop .tif/.tiff here or <span className="text-blue-400 hover:text-blue-400 underline underline-offset-2">browse</span>
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Accepted formats: .tif, .tiff</p>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -195,11 +199,11 @@ export default function UploadPage({
               <p className="text-[11px] text-gray-500 mt-0.5">Detection results per dataset</p>
             </div>
             <div className="flex-1 min-h-0 overflow-auto divide-y divide-gray-800/60">
-              {/* Running job */}
-              {pipelineRunning && pipelineDatasetId && (() => {
-                const runDs = datasets.find(d => d.id === pipelineDatasetId)
+              {/* Running jobs */}
+              {pipelineJobs && Object.entries(pipelineJobs).filter(([, j]) => j.running).map(([jid, job]) => {
+                const runDs = datasets.find(d => d.id === job.datasetId)
                 return (
-                  <div className="w-full text-left px-5 py-3 flex items-center gap-3 bg-gray-800/30 animate-pulse">
+                  <div key={jid} className="w-full text-left px-5 py-3 flex items-center gap-3 bg-gray-800/30 animate-pulse">
                     <div className="w-7 h-7 rounded-lg bg-amber-400/10 flex items-center justify-center flex-none">
                       <svg className="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="10" strokeWidth={1.5} />
@@ -207,21 +211,21 @@ export default function UploadPage({
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-amber-300 truncate">{runDs?.name || pipelineDatasetId}</p>
-                      <p className="text-[11px] text-amber-400/70 mt-0.5">{pipelineStep || 'Processing...'}</p>
+                      <p className="text-sm text-amber-300 truncate">{runDs?.name || job.datasetId}</p>
+                      <p className="text-[11px] text-amber-400/70 mt-0.5">{job.step || 'Processing...'}</p>
                     </div>
                   </div>
                 )
-              })()}
+              })}
 
               {/* Completed runs */}
-              {!pipelineRunning && datasets.filter(ds => ds.has_results).length === 0 && (
+              {(!pipelineJobs || !Object.values(pipelineJobs).some(j => j.running)) && datasets.filter(ds => ds.has_results).length === 0 && (
                 <div className="px-5 py-10 text-center text-sm text-gray-600">No runs yet</div>
               )}
               {datasets.filter(ds => ds.has_results).map(ds => (
                 <div
                   key={ds.id}
-                  onClick={() => { onSelectDataset(ds); onNavigateTuning() }}
+                  onClick={() => { onSelectDataset(ds); onNavigateResults() }}
                   className="w-full text-left px-5 py-3 flex items-center gap-3 transition-colors hover:bg-gray-800/50 cursor-pointer"
                 >
                   <div className="w-7 h-7 rounded-lg bg-green-400/10 flex items-center justify-center flex-none">
@@ -231,7 +235,7 @@ export default function UploadPage({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-300 truncate">{ds.run_name || ds.name}</p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">{ds.completed_at ? new Date(ds.completed_at).toLocaleString() : ds.id}</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">{ds.name}{ds.completed_at ? ` · ${new Date(ds.completed_at).toLocaleString()}` : ''}</p>
                   </div>
                   <button
                     onClick={(e) => handleDeleteRun(e, ds.id)}

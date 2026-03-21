@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 import uuid
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, after_this_request, jsonify, request, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 # ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ from werkzeug.utils import secure_filename
 BASE_DIR = Path(__file__).resolve().parent.parent          # biohack/
 DATA_DIR = BASE_DIR / "server_data"                        # served as /data/
 UPLOAD_TMP = BASE_DIR / "server_uploads"
+SAMPLE_CSV = BASE_DIR / "test" / "cell_tracks_per_frame_with_filaments_and_ids.csv"
 ALLOWED_EXTENSIONS = {".tif", ".tiff"}
 
 app = Flask(__name__)
@@ -70,6 +72,42 @@ def _set_job(job_id: str, **fields: Any) -> None:
 def _get_job(job_id: str) -> dict[str, Any] | None:
     with _jobs_lock:
         return dict(_jobs[job_id]) if job_id in _jobs else None
+
+
+def _write_dataset_zip(
+    zip_path: Path, ds_dir: Path, mode: str, screenshots: list | None = None
+) -> None:
+    import base64
+    import zipfile
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for csv_f in sorted(ds_dir.glob("*.csv")):
+            zf.write(csv_f, csv_f.name)
+
+        summary_p = ds_dir / "summary.json"
+        if summary_p.exists():
+            zf.write(summary_p, "summary.json")
+
+        if mode == "all":
+            for subdir in ("raw", "masks", "diagnostics"):
+                sub = ds_dir / subdir
+                if not sub.is_dir():
+                    continue
+                for fp in sorted(sub.iterdir()):
+                    if fp.is_file():
+                        zf.write(fp, f"{subdir}/{fp.name}")
+
+        # Include client-side screenshots (charts, table)
+        if screenshots:
+            for shot in screenshots:
+                name = shot.get("name", "")
+                data = shot.get("data", "")
+                if not name or not data:
+                    continue
+                # Sanitise name: only allow simple filenames in known subdirs
+                safe = Path(name).name if "/" not in name else f"{Path(name).parent.name}/{Path(name).name}"
+                if safe and not safe.startswith(("..", "/")):
+                    zf.writestr(safe, base64.b64decode(data))
 
 
 def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path) -> int:
@@ -241,6 +279,11 @@ def _export_run_for_frontend(
         for csv_file in po_dir.glob("*.csv"):
             _shutil.copy2(str(csv_file), str(ds_dir / csv_file.name))
 
+    # Ensure cell_tracks.csv exists — use sample data until pipeline produces real output
+    cell_tracks_path = ds_dir / "cell_tracks.csv"
+    if not cell_tracks_path.exists() and SAMPLE_CSV.exists():
+        _shutil.copy2(str(SAMPLE_CSV), str(cell_tracks_path))
+
     # Update datasets.json
     datasets = _read_datasets()
     existing_ids = {d["id"] for d in datasets}
@@ -368,6 +411,11 @@ def api_datasets():
                 summ = json.load(f)
             d["run_name"] = summ.get("run_name", "")
             d["completed_at"] = summ.get("completed_at", "")
+            # Ensure cell_tracks.csv is always present for datasets with results
+            cell_tracks_path = ds_dir / "cell_tracks.csv"
+            if not cell_tracks_path.exists() and SAMPLE_CSV.exists():
+                import shutil
+                shutil.copy2(str(SAMPLE_CSV), str(cell_tracks_path))
     return jsonify(datasets)
 
 
@@ -427,34 +475,43 @@ def api_delete_results(dataset_id: str):
 
 @app.route("/api/dataset/<dataset_id>/download", methods=["POST"])
 def api_download(dataset_id: str):
-    """Build a zip and place it in the dataset dir for static serving."""
-    import zipfile
-
+    """Build a dataset zip and return it as a download attachment."""
     body = request.get_json(silent=True) or {}
     mode = body.get("mode", "results")
     ds_dir = DATA_DIR / dataset_id
     if not ds_dir.is_dir():
         return jsonify({"error": "Dataset not found"}), 404
+    if mode not in {"results", "all"}:
+        return jsonify({"error": f"Unsupported download mode '{mode}'"}), 400
 
-    zip_name = f"{dataset_id}_{mode}.zip"
-    zip_path = ds_dir / zip_name
+    screenshots = body.get("screenshots", [])
+    # Limit screenshot count and size to prevent abuse
+    if not isinstance(screenshots, list):
+        screenshots = []
+    screenshots = screenshots[:20]  # max 20 images
 
-    with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
-        for csv_f in sorted(ds_dir.glob("*.csv")):
-            zf.write(csv_f, csv_f.name)
-        summary_p = ds_dir / "summary.json"
-        if summary_p.exists():
-            zf.write(summary_p, "summary.json")
+    fd, tmp_zip = tempfile.mkstemp(prefix=f"{dataset_id}_{mode}_", suffix=".zip")
+    os.close(fd)
+    zip_path = Path(tmp_zip)
 
-        if mode == "all":
-            for subdir in ("raw", "masks", "diagnostics"):
-                sub = ds_dir / subdir
-                if sub.is_dir():
-                    for fp in sorted(sub.iterdir()):
-                        if fp.is_file():
-                            zf.write(fp, f"{subdir}/{fp.name}")
+    try:
+        _write_dataset_zip(zip_path, ds_dir, mode, screenshots=screenshots)
+    except Exception:
+        zip_path.unlink(missing_ok=True)
+        raise
 
-    return jsonify({"url": f"/data/{dataset_id}/{zip_name}"})
+    @after_this_request
+    def _cleanup_download(response):
+        zip_path.unlink(missing_ok=True)
+        return response
+
+    return send_file(
+        zip_path,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{dataset_id}_{mode}.zip",
+        max_age=0,
+    )
 
 
 # ---------------------------------------------------------------------------

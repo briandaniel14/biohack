@@ -1,0 +1,65 @@
+[
+  {
+    "id": "dataset_01",
+    "name": "ch20_URA7_URA8_001-crop1",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_02",
+    "name": "ch20_URA7_URA8_001-crop2",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_03",
+    "name": "ch20_URA7_URA8_001-crop3",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_04",
+    "name": "ch20_URA7_URA8_002-crop1",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_05",
+    "name": "ch20_URA7_URA8_002-crop2",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_06",
+    "name": "ch20_URA7_URA8_002-crop3",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_07",
+    "name": "ch20_URA7_URA8_002-crop4",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_08",
+    "name": "ch20_URA7_URA8_002-crop5",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  },
+  {
+    "id": "dataset_09",
+    "name": "ch20_URA7_URA8_002-crop6",
+    "frames": 100,
+    "timeSpan": "24h",
+    "frameInterval": 14.4
+  }
+]

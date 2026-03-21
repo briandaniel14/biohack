@@ -58,28 +58,17 @@ export default function HyperparamPanel({ onChange }) {
           Reset
         </button>
       </div>
-      <div className="flex-1 overflow-auto min-h-0 p-4 space-y-4">
+      <div className="flex-1 overflow-auto min-h-0 p-4 space-y-2">
         {PARAMS.map(p => (
-          <div key={p.key} className="rounded-lg bg-gray-800/40 p-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
-                {p.label}
-                <span
-                  className="text-gray-500 hover:text-blue-400 cursor-help text-[10px] transition-colors"
-                  onMouseEnter={e => showTooltip(e, p.desc)}
-                  onMouseLeave={hideTooltip}
-                >ⓘ</span>
-              </label>
-              <input
-                type="number"
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                value={values[p.key]}
-                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleChange(p.key, v) }}
-                className="w-16 bg-gray-900 border border-gray-700 rounded-md px-2 py-0.5 text-xs font-mono text-gray-300 text-right focus:border-blue-500 focus:outline-none transition-colors"
-              />
-            </div>
+          <div key={p.key} className="rounded-lg bg-gray-800/40 px-3 py-2 flex items-center gap-3">
+            <label className="w-[170px] shrink-0 text-xs text-gray-300 font-medium flex items-center gap-1 whitespace-nowrap">
+              {p.label}
+              <span
+                className="text-gray-500 hover:text-blue-400 cursor-help text-[10px] transition-colors"
+                onMouseEnter={e => showTooltip(e, p.desc)}
+                onMouseLeave={hideTooltip}
+              >ⓘ</span>
+            </label>
             <input
               type="range"
               min={p.min}
@@ -87,12 +76,17 @@ export default function HyperparamPanel({ onChange }) {
               step={p.step}
               value={values[p.key]}
               onChange={e => handleChange(p.key, parseFloat(e.target.value))}
-              className="w-full accent-blue-500 h-1.5"
+              className="flex-1 min-w-0 accent-blue-500 h-1.5"
             />
-            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
-              <span>{p.min}</span>
-              <span>{p.max}</span>
-            </div>
+            <input
+              type="number"
+              min={p.min}
+              max={p.max}
+              step={p.step}
+              value={values[p.key]}
+              onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleChange(p.key, v) }}
+              className="w-20 bg-gray-900 border border-gray-700 rounded-md px-2 py-0.5 text-xs font-mono text-gray-300 text-right focus:border-blue-500 focus:outline-none transition-colors shrink-0"
+            />
           </div>
         ))}
       </div>

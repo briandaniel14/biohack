@@ -10,6 +10,27 @@ const VIEW_MODES = [
   { key: 'diagnostic', label: 'Diagnostic' },
 ]
 
+function getDownloadFilename(contentDisposition, fallbackName) {
+  if (!contentDisposition) return fallbackName
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      return utf8Match[1]
+    }
+  }
+
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i)
+  if (quotedMatch?.[1]) return quotedMatch[1]
+
+  const bareMatch = contentDisposition.match(/filename=([^;]+)/i)
+  if (bareMatch?.[1]) return bareMatch[1].trim()
+
+  return fallbackName
+}
+
 export default function ResultsPage({
   currentDataset,
   onNavigateTuning,
@@ -26,6 +47,7 @@ export default function ResultsPage({
   const [loop, setLoop] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [downloading, setDownloading] = useState(null)
+  const [filteredFilamentIds, setFilteredFilamentIds] = useState(null)
 
   const timerRef = useRef(null)
   const preloadedRef = useRef({})
@@ -142,26 +164,121 @@ export default function ResultsPage({
     })
   }, [])
 
+  const captureScreenshots = useCallback(async () => {
+    const screenshots = []
+
+    // Capture chart SVGs with titles
+    if (chartsRef.current) {
+      const panels = chartsRef.current.querySelectorAll('.bg-gray-900.rounded')
+      const chartNames = ['filament_length', 'filaments_per_frame', 'filament_area', 'filament_eccentricity']
+      for (let i = 0; i < panels.length; i++) {
+        const panel = panels[i]
+        const titleEl = panel.querySelector('div')
+        const title = titleEl?.textContent || ''
+        const svgEl = panel.querySelector('svg.recharts-surface')
+        if (!svgEl) continue
+
+        const blob = await new Promise((resolve) => {
+          const rect = svgEl.getBoundingClientRect()
+          const w = Math.round(rect.width)
+          const h = Math.round(rect.height)
+          const titleH = 28
+          const clone = svgEl.cloneNode(true)
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+          clone.setAttribute('width', w)
+          clone.setAttribute('height', h)
+          if (!clone.getAttribute('viewBox')) clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
+          const svgStr = new XMLSerializer().serializeToString(clone)
+          const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)))
+          const canvas = document.createElement('canvas')
+          const scale = 2
+          canvas.width = w * scale
+          canvas.height = (h + titleH) * scale
+          const ctx = canvas.getContext('2d')
+          ctx.scale(scale, scale)
+          const img = new Image()
+          img.onload = () => {
+            ctx.fillStyle = '#111827'
+            ctx.fillRect(0, 0, w, h + titleH)
+            // Draw title
+            ctx.fillStyle = '#ffffff'
+            ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(title.toUpperCase(), 8, titleH / 2)
+            // Draw chart below title
+            ctx.drawImage(img, 0, titleH, w, h)
+            canvas.toBlob(resolve, 'image/png')
+          }
+          img.onerror = () => resolve(null)
+          img.src = dataUrl
+        })
+
+        if (blob) {
+          const buf = await blob.arrayBuffer()
+          screenshots.push({ name: `charts/${chartNames[i] || 'chart_' + i}.png`, data: btoa(String.fromCharCode(...new Uint8Array(buf))) })
+        }
+      }
+    }
+
+    // Generate filament summary CSV
+    if (filamentSummary.length > 0) {
+      const headers = ['Filament ID', 'Host Cell ID', 'First Frame', 'Last Frame', 'Frame Count', 'Avg Length (µm)', 'Max Length (µm)', 'Avg Area (µm²)', 'Avg Eccentricity']
+      const csvRows = [headers.join(',')]
+      for (const f of filamentSummary) {
+        csvRows.push([
+          f.filament_ID, f.host_cell_ID, f.first_frame, f.last_frame,
+          f.frame_count, f.avg_length, f.max_length, f.avg_area, f.avg_eccentricity
+        ].join(','))
+      }
+      const csvStr = csvRows.join('\n')
+      screenshots.push({ name: 'filament_summary.csv', data: btoa(csvStr) })
+    }
+
+    return screenshots
+  }, [filamentSummary])
+
   const handleDownload = useCallback(async (mode) => {
     if (!currentDataset || downloading) return
     setDownloading(mode)
     try {
-      // Ask server to build the zip, get back the static URL
+      // Capture screenshots before requesting zip
+      const screenshots = await captureScreenshots()
+
       const resp = await fetch('/api/dataset/' + currentDataset.id + '/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode, screenshots }),
       })
-      if (!resp.ok) throw new Error('Build zip failed')
-      const { url } = await resp.json()
-      // Open the static file URL — served by nginx, guaranteed complete
-      window.open(url, '_blank')
+      if (!resp.ok) {
+        let message = 'Build zip failed'
+        try {
+          const payload = await resp.json()
+          if (payload?.error) message = payload.error
+        } catch {
+          // Ignore JSON parse failures and keep the default message.
+        }
+        throw new Error(message)
+      }
+
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const contentDisposition = resp.headers.get('Content-Disposition')
+      const fallbackName = currentDataset.id + '_' + mode + '.zip'
+      const filename = getDownloadFilename(contentDisposition, fallbackName)
+      const link = document.createElement('a')
+
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) {
       console.error('Download error:', e)
     } finally {
       setDownloading(null)
     }
-  }, [currentDataset, downloading])
+  }, [currentDataset, downloading, captureScreenshots])
 
   if (!currentDataset) return (
     <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -286,12 +403,15 @@ export default function ResultsPage({
             onSelectFilament={setSelectedFilamentId}
             onJumpToFrame={jumpToFrame}
             currentFrame={frame}
+            onFilterChange={setFilteredFilamentIds}
           />
         </div>
         <div className="flex-1 min-h-0" ref={chartsRef}>
           <MetricsDashboard
             rows={rows}
             filamentSummary={filamentSummary}
+            onJumpToFrame={jumpToFrame}
+            filteredFilamentIds={filteredFilamentIds}
           />
         </div>
         {/* Download buttons */}

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { getTrackColor, frameToTimestamp } from './data.js'
+import { getTrackColor, frameToTimestamp, PX_TO_UM } from './data.js'
 
 const SORT_KEYS = [
   { key: 'filament_ID', label: 'Fil ID' },
@@ -16,17 +16,46 @@ export default function TrackInspector({
   onSelectFilament,
   onJumpToFrame,
   currentFrame,
+  onFilterChange,
 }) {
   const [sortKey, setSortKey] = useState('filament_ID')
   const [sortAsc, setSortAsc] = useState(true)
+  const [filterKey, setFilterKey] = useState('')
+  const [filterOp, setFilterOp] = useState('>')
+  const [filterVal, setFilterVal] = useState('')
+  const [showFilter, setShowFilter] = useState(false)
+
+  const filteredFilaments = useMemo(() => {
+    if (!filterKey || filterVal === '') return filamentSummary
+    const v = parseFloat(filterVal)
+    if (isNaN(v)) return filamentSummary
+    return filamentSummary.filter(f => {
+      const fv = f[filterKey] ?? 0
+      if (filterOp === '>') return fv > v
+      if (filterOp === '<') return fv < v
+      if (filterOp === '>=') return fv >= v
+      if (filterOp === '<=') return fv <= v
+      if (filterOp === '=') return Math.abs(fv - v) < 0.01
+      return true
+    })
+  }, [filamentSummary, filterKey, filterOp, filterVal])
+
+  // Notify parent of filtered IDs so charts can sync
+  useMemo(() => {
+    if (!filterKey || filterVal === '') {
+      onFilterChange?.(null) // null = no filter active
+    } else {
+      onFilterChange?.(filteredFilaments.map(f => f.filament_ID))
+    }
+  }, [filteredFilaments, filterKey, filterVal, onFilterChange])
 
   const sortedFilaments = useMemo(() => {
-    return [...filamentSummary].sort((a, b) => {
+    return [...filteredFilaments].sort((a, b) => {
       const va = a[sortKey] ?? 0
       const vb = b[sortKey] ?? 0
       return sortAsc ? va - vb : vb - va
     })
-  }, [filamentSummary, sortKey, sortAsc])
+  }, [filteredFilaments, sortKey, sortAsc])
 
   const selectedFilament = useMemo(
     () => filamentSummary.find(f => f.filament_ID === selectedFilamentId),
@@ -47,9 +76,63 @@ export default function TrackInspector({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 bg-gray-900 text-xs font-semibold text-white uppercase tracking-wide border-b border-gray-800">
-        Filament Tracker — {filamentSummary.length} filaments
+      <div className="px-3 py-2 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
+        <span className="text-xs font-semibold text-white uppercase tracking-wide">
+          Filament Tracker — {filteredFilaments.length}{filteredFilaments.length !== filamentSummary.length ? ` / ${filamentSummary.length}` : ''} filaments
+        </span>
+        <button
+          onClick={() => setShowFilter(!showFilter)}
+          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+            showFilter || filterKey ? 'bg-blue-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          <svg className="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+          Filter
+        </button>
       </div>
+
+      {showFilter && (
+        <div className="px-3 py-2 bg-gray-900/80 border-b border-gray-800 flex items-center gap-2 flex-wrap">
+          <select
+            value={filterKey}
+            onChange={e => setFilterKey(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
+          >
+            <option value="">Field...</option>
+            <option value="avg_length">Avg Length (µm)</option>
+            <option value="max_length">Max Length (µm)</option>
+            <option value="avg_area">Avg Area (µm²)</option>
+            <option value="frame_count">Frame Count</option>
+            <option value="avg_eccentricity">Eccentricity</option>
+            <option value="filament_ID">Filament ID</option>
+            <option value="host_cell_ID">Cell ID</option>
+          </select>
+          <select
+            value={filterOp}
+            onChange={e => setFilterOp(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-blue-500 w-14"
+          >
+            <option value=">">&gt;</option>
+            <option value=">=">&ge;</option>
+            <option value="<">&lt;</option>
+            <option value="<=">&le;</option>
+            <option value="=">=</option>
+          </select>
+          <input
+            type="number"
+            value={filterVal}
+            onChange={e => setFilterVal(e.target.value)}
+            placeholder="Value"
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 w-20 font-mono focus:outline-none focus:border-blue-500"
+          />
+          {filterKey && filterVal !== '' && (
+            <button
+              onClick={() => { setFilterKey(''); setFilterVal('') }}
+              className="px-2 py-1 rounded text-[11px] bg-gray-800 text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            >Clear</button>
+          )}
+        </div>
+      )}
 
       {/* Filament table */}
       <div className="flex-1 overflow-auto min-h-0">
@@ -84,7 +167,7 @@ export default function TrackInspector({
                   </td>
                   <td className="px-2 py-1 font-mono text-gray-400">{f.host_cell_ID}</td>
                   <td className="px-2 py-1 font-mono">{f.frame_count}</td>
-                  <td className="px-2 py-1 font-mono">{f.avg_length}px</td>
+                  <td className="px-2 py-1 font-mono">{f.avg_length}µm</td>
                   <td className="px-2 py-1 font-mono">f{Math.round(f.time_of_appearance || f.first_frame)}</td>
                 </tr>
               )
@@ -127,15 +210,15 @@ export default function TrackInspector({
             </div>
             <div>
               <span className="text-gray-500">Avg length:</span>{' '}
-              <span className="font-mono">{selectedFilament.avg_length}px</span>
+              <span className="font-mono">{selectedFilament.avg_length}µm</span>
             </div>
             <div>
               <span className="text-gray-500">Max length:</span>{' '}
-              <span className="font-mono">{selectedFilament.max_length}px</span>
+              <span className="font-mono">{selectedFilament.max_length}µm</span>
             </div>
             <div>
               <span className="text-gray-500">Avg area:</span>{' '}
-              <span className="font-mono">{selectedFilament.avg_area}px²</span>
+              <span className="font-mono">{selectedFilament.avg_area}µm²</span>
             </div>
             <div>
               <span className="text-gray-500">Eccentricity:</span>{' '}
@@ -157,7 +240,7 @@ export default function TrackInspector({
                       : 'bg-blue-900/60 hover:bg-blue-800 text-blue-300'
                   }`}
                 >
-                  f{r.frame} — {Number(r.filament_mean_length_px).toFixed(1)}px
+                  f{r.frame} — {(Number(r.filament_mean_length_px) * PX_TO_UM).toFixed(2)}µm
                 </button>
               ))}
             </div>

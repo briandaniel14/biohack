@@ -15,11 +15,19 @@ export default function App() {
   const [datasets, setDatasets] = useState([])
   const [currentDataset, setCurrentDataset] = useState(null)
 
-  // Pipeline job state — lives at App level so it persists across page nav
-  const [pipelineRunning, setPipelineRunning] = useState(false)
-  const [pipelineStep, setPipelineStep] = useState('')
-  const [pipelineDatasetId, setPipelineDatasetId] = useState(null)
-  const pollRef = useRef(null)
+  // Pipeline jobs — supports concurrent runs, persists across page refresh
+  const [pipelineJobs, setPipelineJobs] = useState(() => {
+    try { const s = sessionStorage.getItem('pipelineJobs'); return s ? JSON.parse(s) : {} }
+    catch { return {} }
+  })
+  const pollRefs = useRef({})
+  useEffect(() => { sessionStorage.setItem('pipelineJobs', JSON.stringify(pipelineJobs)) }, [pipelineJobs])
+
+  // Derived compat state
+  const pipelineRunning = Object.values(pipelineJobs).some(j => j.running)
+  const activeJob = Object.values(pipelineJobs).find(j => j.running) || Object.values(pipelineJobs).find(j => j.step)
+  const pipelineStep = activeJob?.step || ''
+  const pipelineDatasetId = activeJob?.datasetId || null
 
   const navigateTo = (p) => {
     setPage(p)
@@ -38,47 +46,58 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
-  // Cleanup poll on unmount
+  // Resume polling on mount (survives refresh), cleanup on unmount
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [])
+    Object.entries(pipelineJobs).forEach(([jid, job]) => {
+      if (job.running && !pollRefs.current[jid]) {
+        pollRefs.current[jid] = setInterval(async () => {
+          try {
+            const st = await pollJobStatus(jid)
+            if (st.status === 'complete') {
+              clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
+              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Done!'}; return n })
+              loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
+              setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
+            } else if (st.status === 'error') {
+              clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
+              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Error: ' + (st.error||'Failed')}; return n })
+            } else {
+              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], step: st.step || 'Processing...'}; return n })
+            }
+          } catch {}
+        }, 2000)
+      }
+    })
+    return () => { Object.values(pollRefs.current).forEach(id => clearInterval(id)) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRunPipeline = useCallback(async (datasetId, params) => {
-    if (pipelineRunning) return
-    setPipelineRunning(true)
-    setPipelineStep('Starting...')
-    setPipelineDatasetId(datasetId)
+    const alreadyRunning = Object.values(pipelineJobs).some(j => j.running && j.datasetId === datasetId)
+    if (alreadyRunning) return
     try {
       const { job_id, error } = await runPipeline(datasetId, params)
-      if (error) { setPipelineStep(`Error: ${error}`); setPipelineRunning(false); return }
-
-      pollRef.current = setInterval(async () => {
-        const status = await pollJobStatus(job_id)
-        if (status.status === 'complete') {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-          setPipelineStep('Done!')
-          setPipelineRunning(false)
-          setPipelineDatasetId(null)
-          // Refresh datasets list so has_results updates
-          loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
-          setTimeout(() => setPipelineStep(''), 5000)
-        } else if (status.status === 'error') {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-          setPipelineStep(`Error: ${status.error || 'Pipeline failed'}`)
-          setPipelineRunning(false)
-          setPipelineDatasetId(null)
-        } else {
-          setPipelineStep(status.step || 'Processing...')
-        }
+      if (error) { setPipelineJobs(p => ({...p, ['e'+Date.now()]: {datasetId, running: false, step: 'Error: '+error}})); return }
+      setPipelineJobs(p => ({...p, [job_id]: {datasetId, running: true, step: 'Starting...'}}))
+      pollRefs.current[job_id] = setInterval(async () => {
+        try {
+          const st = await pollJobStatus(job_id)
+          if (st.status === 'complete') {
+            clearInterval(pollRefs.current[job_id]); delete pollRefs.current[job_id]
+            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], running: false, step: 'Done!'}; return n })
+            loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
+            setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[job_id]; return n }), 5000)
+          } else if (st.status === 'error') {
+            clearInterval(pollRefs.current[job_id]); delete pollRefs.current[job_id]
+            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], running: false, step: 'Error: '+(st.error||'Failed')}; return n })
+          } else {
+            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], step: st.step || 'Processing...'}; return n })
+          }
+        } catch {}
       }, 2000)
     } catch (e) {
-      setPipelineStep(`Error: ${e.message}`)
-      setPipelineRunning(false)
-      setPipelineDatasetId(null)
+      setPipelineJobs(p => ({...p, ['e'+Date.now()]: {datasetId, running: false, step: 'Error: '+e.message}}))
     }
-  }, [pipelineRunning])
+  }, [pipelineJobs])
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
@@ -111,17 +130,7 @@ export default function App() {
             <span className="truncate max-w-[200px]">{currentDataset.name}</span>
           </div>
         )}
-        <div className="ml-auto flex items-center gap-3">
-          {pipelineRunning && (
-            <div className="flex items-center gap-1.5 text-xs text-green-400">
-              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-              {pipelineStep}
-            </div>
-          )}
-          {!pipelineRunning && pipelineStep && (
-            <div className="text-xs text-green-400">{pipelineStep}</div>
-          )}
-        </div>
+        <div className="ml-auto" />
       </header>
 
       {/* Page content */}
@@ -132,6 +141,8 @@ export default function App() {
           onSelectDataset={setCurrentDataset}
           onDatasetsChange={setDatasets}
           onNavigateTuning={() => navigateTo('tuning')}
+          onNavigateResults={() => navigateTo('results')}
+          pipelineJobs={pipelineJobs}
           pipelineRunning={pipelineRunning}
           pipelineDatasetId={pipelineDatasetId}
           pipelineStep={pipelineStep}
@@ -142,8 +153,8 @@ export default function App() {
           currentDataset={currentDataset}
           onNavigateResults={() => navigateTo('results')}
           onNavigateUpload={() => navigateTo('upload')}
-          pipelineRunning={pipelineRunning}
-          pipelineStep={pipelineStep}
+          pipelineRunning={Object.values(pipelineJobs).some(j => j.running && j.datasetId === currentDataset?.id)}
+          pipelineStep={(() => { const j = Object.values(pipelineJobs).find(j => j.datasetId === currentDataset?.id); return j?.step || '' })()}
           onRunPipeline={handleRunPipeline}
         />
       )}

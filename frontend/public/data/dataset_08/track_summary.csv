@@ -1,0 +1,4 @@
+track_id,initial_morphology,final_morphology,morphology_label,num_transitions,formation_frame,dissolution_frame,lifetime_frames,lifetime_minutes,max_length,mean_intensity_avg
+2,filament,filament,filament,0,20,95,76,1094.4,26.970651486587755,0.4493411457037796
+3,filament,filament,filament,0,28,37,10,144.0,21.614617204338646,0.4088539757887213
+8,filament,filament,filament,0,98,99,2,28.8,19.6916425655753,0.5576233213717765

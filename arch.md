@@ -209,6 +209,21 @@ Returns the current dataset index.
 ]
 ```
 
+#### `POST /api/dataset/<dataset_id>/download`
+
+Builds a ZIP archive for the selected dataset and returns it directly as an attachment response.
+
+**Request:**
+```json
+{ "mode": "results" | "all" }
+```
+
+**Behavior:**
+- `results` includes `summary.json` plus dataset CSV outputs
+- `all` also includes `raw/`, `masks/`, and `diagnostics/` image folders
+- The ZIP is generated in a temporary file and streamed back in the same request
+- The frontend downloads the response body as a blob instead of opening a static `/data/...zip` URL in a new tab
+
 Reads from `/home/ubuntu/frontend/data/datasets.json`.
 
 ### Background Processing Thread
