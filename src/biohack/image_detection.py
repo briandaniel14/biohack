@@ -582,6 +582,7 @@ def process_directory(
 
     original_input_dir_str = str(in_dir)
 
+    moved_paths: list[Path] = image_paths
     # moved_paths: list[Path] = []
     # for p in image_paths:
     #     dest = raw_run_dir / p.name
