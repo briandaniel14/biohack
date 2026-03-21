@@ -3,6 +3,9 @@ import os
 import numpy as np
 from tifffile import imread, imwrite
 
+from pathlib import Path
+import uuid
+
 
 def split_stack(img: np.ndarray, *, verbose: bool = False) -> np.ndarray:
     """Normalize stack to ``(T, C, Y, X)`` with ``C == 2`` (brightfield + GFP)."""
@@ -30,9 +33,8 @@ def split_stack(img: np.ndarray, *, verbose: bool = False) -> np.ndarray:
 
 
 def split_two_channel_time_stacks(
-    input_dir: str,
-    brightfield_dir: str,
-    gfp_dir: str,
+    input_file: str,
+    output_dir: str,
     *,
     brightfield_channel_index: int = 0,
     gfp_channel_index: int = 1,
@@ -52,40 +54,43 @@ def split_two_channel_time_stacks(
     verbose
         Print progress.
     """
+    output_dir = Path(output_dir) / str(uuid.uuid4())
+    input_file = Path(input_file)
+
+    brightfield_dir = output_dir / "brightfield/"
+    gfp_dir = output_dir / "gfp/"
+
     os.makedirs(brightfield_dir, exist_ok=True)
     os.makedirs(gfp_dir, exist_ok=True)
 
-    files = [f for f in os.listdir(input_dir) if f.lower().endswith((".tif", ".tiff"))]
-    if not files:
-        raise RuntimeError(f"No TIFF files found in {input_dir}")
-
+    
+    
     bf_ch = brightfield_channel_index
     gfp_ch = gfp_channel_index
 
-    for file in files:
-        path = os.path.join(input_dir, file)
-        stem = os.path.splitext(file)[0]
-        if verbose:
-            print(f"\nProcessing {file}")
-        img = imread(path)
-        img = split_stack(img, verbose=verbose)
-        t_n, c_n, _, _ = img.shape
-        if c_n < max(bf_ch, gfp_ch) + 1:
-            raise ValueError(
-                f"Stack has {c_n} channels; need indices {bf_ch}, {gfp_ch}"
-            )
+    stem = input_file.stem
+    if verbose:
+        print(f"\nProcessing {input_file}")
+    img = imread(input_file)
+    img = split_stack(img, verbose=verbose)
+    t_n, c_n, _, _ = img.shape
+    
+    if c_n < max(bf_ch, gfp_ch) + 1:
+        raise ValueError(
+            f"Stack has {c_n} channels; need indices {bf_ch}, {gfp_ch}"
+        )
 
-        for t in range(t_n):
-            bf = img[t, bf_ch]
-            gfp = img[t, gfp_ch]
-            bf_out = os.path.join(brightfield_dir, f"{stem}_frame_{t + 1:04d}_BF.tif")
-            gfp_out = os.path.join(gfp_dir, f"{stem}_frame_{t + 1:04d}_GFP.tif")
-            imwrite(bf_out, bf)
-            imwrite(gfp_out, gfp)
+    for t in range(t_n):
+        bf = img[t, bf_ch]
+        gfp = img[t, gfp_ch]
+        bf_out = os.path.join(brightfield_dir, f"{stem}_frame_{t + 1:04d}_BF.tif")
+        gfp_out = os.path.join(gfp_dir, f"{stem}_frame_{t + 1:04d}_GFP.tif")
+        imwrite(bf_out, bf)
+        imwrite(gfp_out, gfp)
 
-        if verbose:
-            print(f"Wrote {t_n} BF frames to {brightfield_dir}")
-            print(f"Wrote {t_n} GFP frames to {gfp_dir}")
+    if verbose:
+        print(f"Wrote {t_n} BF frames to {brightfield_dir}")
+        print(f"Wrote {t_n} GFP frames to {gfp_dir}")
 
     if verbose:
         print("Done")
