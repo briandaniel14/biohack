@@ -3,6 +3,7 @@ import { loadDatasets, loadDatasetSummary, runPipeline, pollJobStatus } from './
 import UploadPage from './UploadPage.jsx'
 import TuningPage from './TuningPage.jsx'
 import ResultsPage from './ResultsPage.jsx'
+import PricingModal from './PricingModal.jsx'
 
 const PAGES = [
   { key: 'upload', label: 'Upload', icon: 'M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4' },
@@ -14,6 +15,7 @@ export default function App() {
   const [page, setPage] = useState('upload')
   const [datasets, setDatasets] = useState([])
   const [currentDataset, setCurrentDataset] = useState(null)
+  const [showPricing, setShowPricing] = useState(false)
 
   // Pipeline jobs — supports concurrent runs, persists across page refresh
   const [pipelineJobs, setPipelineJobs] = useState(() => {
@@ -130,7 +132,17 @@ export default function App() {
             <span className="truncate max-w-[200px]">{currentDataset.name}</span>
           </div>
         )}
-        <div className="ml-auto" />
+        <div className="ml-auto">
+          <button
+            onClick={() => setShowPricing(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium shadow-sm shadow-blue-700/25 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Upgrade
+          </button>
+        </div>
       </header>
 
       {/* Page content */}
@@ -164,6 +176,7 @@ export default function App() {
           onNavigateTuning={() => navigateTo('tuning')}
         />
       )}
+      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
     </div>
   )
 }

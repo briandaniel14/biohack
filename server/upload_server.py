@@ -515,6 +515,37 @@ def api_download(dataset_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Stripe checkout
+# ---------------------------------------------------------------------------
+
+STRIPE_SECRET_KEY = os.environ.get(
+    "STRIPE_SECRET_KEY",
+    "",
+)
+STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "price_1TDVN2PpTtEsY4oKkuBZlSEB")
+
+
+@app.route("/api/checkout", methods=["POST"])
+def api_checkout():
+    """Create a Stripe Checkout session and return the redirect URL."""
+    try:
+        import stripe
+        stripe.api_key = STRIPE_SECRET_KEY
+        origin = request.headers.get("Origin", request.host_url.rstrip("/"))
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+            success_url=f"{origin}/?checkout=success",
+            cancel_url=f"{origin}/?checkout=cancelled",
+        )
+        return jsonify({"url": session.url})
+    except ImportError:
+        return jsonify({"error": "Stripe not installed on server"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # Static file serving for /data/
 # ---------------------------------------------------------------------------
 
