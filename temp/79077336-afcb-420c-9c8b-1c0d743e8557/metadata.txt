@@ -1,0 +1,35 @@
+run_uid: 79077336-afcb-420c-9c8b-1c0d743e8557
+run_name: test_run
+started_at_utc: 2026-03-21T11:12:48.603682+00:00
+finished_at_utc: 2026-03-21T11:14:25.825303+00:00
+images_processed: 800
+images_with_filament_present: 263
+total_connected_components (sum over images): 263
+original_input_dir: C:\data\UoE\biohack\data\separated_frames
+run_output_dir: C:\data\UoE\biohack\temp\79077336-afcb-420c-9c8b-1c0d743e8557
+raw_inputs_dir: C:\data\UoE\biohack\temp\79077336-afcb-420c-9c8b-1c0d743e8557\raw_inputs
+
+--- pipeline_config (JSON) ---
+{
+  "clip_low_percentile": 0.0,
+  "clip_high_percentile": 100.0,
+  "gaussian_sigma": 2.5,
+  "foreground_percentile": 99.5,
+  "local_block_size": 35,
+  "local_offset": -0.01,
+  "frangi_sigmas": [
+    1.0,
+    2.0,
+    3.0
+  ],
+  "frangi_threshold_percentile": 99.5,
+  "min_object_size": 25,
+  "min_pixels_for_presence": 20,
+  "figure_dpi": 140,
+  "cmap": "gray",
+  "verbose": true,
+  "input_dir": "data\\separated_frames",
+  "output_dir": "temp",
+  "max_workers": 6,
+  "run_name": "test_run"
+}
