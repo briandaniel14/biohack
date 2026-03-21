@@ -1,10 +1,11 @@
-import numpy as np
-from PIL import Image
-from IPython.display import display
 from pathlib import Path
 
+import numpy as np
+from IPython.display import display
+from PIL import Image
 
-def load_tiffs(tiff_paths: list[str]) -> list[list[np.array]]:
+
+def load_tiffs(tiff_paths: list[Path]) -> list[list[np.ndarray]]:
     movies = []
 
     for path in tiff_paths:
@@ -22,12 +23,10 @@ def load_tiffs(tiff_paths: list[str]) -> list[list[np.array]]:
 
     return movies
 
+
 def load_image_paths(image_dir: str | Path) -> list[Path]:
     image_dir = Path(image_dir)
-    paths = sorted(
-        p for p in image_dir.iterdir()
-        if p.is_file() and p.suffix.lower()
-    )
+    paths = sorted(p for p in image_dir.iterdir() if p.is_file() and p.suffix.lower())
     if not paths:
         raise ValueError(f"No images found in {image_dir}")
     return paths
@@ -36,6 +35,7 @@ def load_image_paths(image_dir: str | Path) -> list[Path]:
 def load_grayscale_image(path: str | Path, convert: str = "L") -> np.ndarray:
     img = Image.open(path).convert(convert)
     return np.array(img)
+
 
 def matrix_to_image(
     matrix: np.ndarray,
@@ -56,7 +56,7 @@ def matrix_to_image(
     """
     arr = np.asarray(matrix)
 
-    if arr.ndim != 2:
+    if arr.ndim != 2:  # noqa: PLR2004
         raise ValueError(f"Expected a 2D matrix, got shape {arr.shape}")
 
     if normalize:
