@@ -37,10 +37,14 @@ DEVICE = (
 def make_weighted_sampler(dataset: SyntheticDataset) -> WeightedRandomSampler:
     """Oversample positive (filament) images so each batch is ~50/50."""
     print("  Building sampler weights...")
-    has_filament = np.array(
-        [tifffile.imread(os.path.join(dataset.mask_dir, f)).any() for f in dataset.files],  # noqa: PERF401
-        dtype=np.float32,
-    )
+    if dataset._masks is not None:
+        # Fast path: use cached masks already in RAM
+        has_filament = (dataset._masks.reshape(len(dataset), -1).sum(axis=1) > 0).astype(np.float32)
+    else:
+        has_filament = np.array(
+            [tifffile.imread(os.path.join(dataset.mask_dir, f)).any() for f in dataset.files],  # noqa: PERF401
+            dtype=np.float32,
+        )
     pos = has_filament.sum()
     neg = len(has_filament) - pos
     print(f"  Positives: {int(pos)}  Negatives: {int(neg)}")
