@@ -30,9 +30,29 @@ figure_dpi: 140
 # Colormap used for displaying images. Typically "gray" for fluorescence microscopy. Switching changes visual appearance only.
 cmap: "gray"
 
-# Optional
+# Required for batch runs: parent folder containing ``brightfield/`` and ``gfp/`` frame trees.
+dataset_directory: "data/separated_frames"
+# Runs are written to ``<results_directory>/<run_uuid>/`` (filament_mask/, diagnostics/, copies of bf/gfp).
+results_directory: "temp/results"
+
 verbose: true
-input_dir: "data/separated_frames/"
-output_dir: "temp/"
 max_workers: 6
 run_name: "test_run"
+
+model_type_bf: "cyto3"
+model_type_gfp: "cyto3"
+# Use YAML ``null`` (not the word None) so parsers do not treat it as the string "None".
+diameter_bf: null
+diameter_gfp: null
+channels_bf: [0, 0]
+channels_gfp: [0, 0]
+use_gpu: False
+pillar_iou_threshold: 0.10
+min_area_bf: 50
+min_area_gfp: 20
+use_existing_cell_masks: False
+max_link_distance: 60
+min_overlap_fraction: 0.15
+bud_distance: 35
+bud_overlap_fraction: 0.05
+max_filament_gap: 1
