@@ -50,7 +50,7 @@ export default function TrackInspector({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 bg-gray-900 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-800">
+      <div className="px-3 py-2 bg-gray-900 text-xs font-semibold text-white uppercase tracking-wide border-b border-gray-800">
         Track Inspector — {trackSummary.length} tracks
       </div>
 

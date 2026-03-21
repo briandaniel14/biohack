@@ -218,10 +218,12 @@ def _export_run_for_frontend(
         })
 
     # Summary JSON
+    from datetime import datetime, timezone
     summary = {
         "dataset_id": dataset_id,
         "run_uid": batch.get("run_uid", ""),
-        "run_name": batch.get("run_name", ""),
+        "run_name": "",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
         "frame_count": len(sorted_names),
         "frames_with_filament": sum(1 for f in frame_stats if f["filament_present"]),
         "frame_stats": frame_stats,
@@ -349,7 +351,13 @@ def api_datasets():
     datasets = _read_datasets()
     for d in datasets:
         ds_dir = DATA_DIR / d["id"]
-        d["has_results"] = (ds_dir / "summary.json").exists()
+        summary_path = ds_dir / "summary.json"
+        d["has_results"] = summary_path.exists()
+        if summary_path.exists():
+            with open(summary_path) as f:
+                summ = json.load(f)
+            d["run_name"] = summ.get("run_name", "")
+            d["completed_at"] = summ.get("completed_at", "")
     return jsonify(datasets)
 
 
@@ -366,6 +374,23 @@ def api_delete_dataset(dataset_id: str):
     datasets = [d for d in datasets if d["id"] != dataset_id]
     _write_datasets(datasets)
 
+    return jsonify({"ok": True})
+
+
+@app.route("/api/dataset/<dataset_id>/run-name", methods=["PATCH"])
+def api_update_run_name(dataset_id: str):
+    """Update the run_name in summary.json."""
+    body = request.get_json(silent=True) or {}
+    run_name = body.get("run_name", "")
+    ds_dir = DATA_DIR / dataset_id
+    summary_path = ds_dir / "summary.json"
+    if not summary_path.exists():
+        return jsonify({"error": "No results found"}), 404
+    with open(summary_path) as f:
+        summ = json.load(f)
+    summ["run_name"] = run_name
+    with open(summary_path, "w") as f:
+        json.dump(summ, f, indent=2)
     return jsonify({"ok": True})
 
 

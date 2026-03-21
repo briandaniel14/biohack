@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadDatasetData, loadDatasetSummary, getFrameUrl, frameToTimestamp } from './data.js'
+import { loadDatasetData, loadDatasetSummary, getFrameUrl, frameToTimestamp, saveRunName } from './data.js'
 import HyperparamPanel from './HyperparamPanel.jsx'
 
 const SPEEDS = [1, 2, 5, 10]
@@ -27,6 +27,7 @@ export default function TuningPage({
   const [loading, setLoading] = useState(true)
   const [loop, setLoop] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const [runName, setRunName] = useState('')
 
   const timerRef = useRef(null)
   const preloadedRef = useRef({})
@@ -104,13 +105,11 @@ export default function TuningPage({
     </div>
   )
 
-  const detectionCount = measurements.filter(m => m.frame === frame).length
-  const trackCount = trackSummary.length
 
   return (
     <div className="flex-1 flex min-h-0">
       {/* LEFT: Image + Controls */}
-      <div className="w-1/2 flex flex-col min-h-0 border-r border-gray-800">
+      <div className="w-[42%] flex flex-col min-h-0 border-r border-gray-800">
         {/* Image */}
         <div className="flex-1 min-h-0 bg-black flex items-center justify-center p-4">
           {loading ? (
@@ -199,26 +198,29 @@ export default function TuningPage({
             </div>
           </div>
 
-          {/* Quick stats bar */}
-          <div className="flex gap-3 pt-1">
-            <div className="flex-1 rounded-lg bg-gray-800/60 px-3 py-2">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Tracks</p>
-              <p className="text-lg font-semibold text-white">{trackCount}</p>
-            </div>
-            <div className="flex-1 rounded-lg bg-gray-800/60 px-3 py-2">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">This frame</p>
-              <p className="text-lg font-semibold text-white">{detectionCount}</p>
-            </div>
-            <div className="flex-1 rounded-lg bg-gray-800/60 px-3 py-2">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Dataset</p>
-              <p className="text-sm font-medium text-white truncate">{currentDataset.id}</p>
-            </div>
+          {/* Run name */}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              placeholder="Name this run..."
+              value={runName}
+              onChange={e => setRunName(e.target.value)}
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:border-green-500 focus:outline-none transition-colors"
+            />
+            <button
+              onClick={async () => {
+                if (!runName.trim() || !currentDataset) return
+                await saveRunName(currentDataset.id, runName.trim())
+              }}
+              disabled={!runName.trim()}
+              className="px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300 border border-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >Save</button>
           </div>
         </div>
       </div>
 
       {/* RIGHT: Hyperparameters + Actions */}
-      <div className="w-1/2 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 min-h-0 overflow-hidden">
           <HyperparamPanel onChange={vals => { paramsRef.current = vals }} />
         </div>
@@ -237,7 +239,12 @@ export default function TuningPage({
             )}
           </button>
           <button
-            onClick={onNavigateResults}
+            onClick={async () => {
+              if (runName.trim() && currentDataset) {
+                await saveRunName(currentDataset.id, runName.trim())
+              }
+              onNavigateResults()
+            }}
             className="w-full py-2.5 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors flex items-center justify-center gap-2"
           >
             View Results

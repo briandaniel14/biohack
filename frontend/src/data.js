@@ -82,6 +82,15 @@ export async function deleteDataset(datasetId) {
   return resp.json()
 }
 
+export async function saveRunName(datasetId, runName) {
+  const resp = await fetch(`/api/dataset/${datasetId}/run-name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ run_name: runName }),
+  })
+  return resp.json()
+}
+
 export async function deleteResults(datasetId) {
   const resp = await fetch(`/api/dataset/${datasetId}/results`, { method: 'DELETE' })
   return resp.json()

@@ -208,8 +208,8 @@ export default function UploadPage({
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-300 truncate">{ds.name}</p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">{ds.id} · Default parameters</p>
+                    <p className="text-sm text-gray-300 truncate">{ds.run_name || ds.name}</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">{ds.completed_at ? new Date(ds.completed_at).toLocaleString() : ds.id}</p>
                   </div>
                   <button
                     onClick={(e) => handleDeleteRun(e, ds.id)}

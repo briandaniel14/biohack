@@ -142,7 +142,7 @@ export default function MetricsDashboard({ measurements, trackSummary }) {
 function ChartPanel({ title, children }) {
   return (
     <div className="bg-gray-900 rounded p-2 flex flex-col min-h-0">
-      <div className="text-[10px] text-gray-500 uppercase mb-1 flex-none">{title}</div>
+      <div className="text-[10px] text-white font-semibold uppercase mb-1 flex-none">{title}</div>
       <div className="flex-1 min-h-0">{children}</div>
     </div>
   )

@@ -79,7 +79,7 @@ export default function App() {
     <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
       {/* Header */}
       <header className="flex-none px-5 py-2.5 bg-gray-900 border-b border-gray-800 flex items-center gap-4">
-        <img src="/logo.png" alt="Logo" className="w-9 h-9" />
+        <img src="/logo.png?v=2" alt="Logo" className="w-9 h-9" />
         <h1 className="text-base font-semibold text-white tracking-tight">Filament Detection</h1>
         <div className="h-5 w-px bg-gray-800 mx-1" />
         <nav className="flex gap-0.5">
