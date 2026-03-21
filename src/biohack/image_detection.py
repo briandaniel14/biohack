@@ -5,8 +5,7 @@ import multiprocessing as mp
 import shutil
 import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import dataclasses
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,72 +18,14 @@ from skimage.filters import frangi
 from skimage.morphology import remove_small_objects
 from tqdm.auto import tqdm
 
+from src.biohack.experiment_config import ExperimentConfig
 from src.biohack.utils import read_yaml
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class FilamentConfig:
-    """
-    Parameters for the first-pass filament segmentation pipeline.
-    
-    """
-
-    # Normalization
-    clip_low_percentile: float = 1.0
-    clip_high_percentile: float = 99.0
-
-    # Denoising
-    gaussian_sigma: float = 1.0
-
-    # Percentile thresholding
-    foreground_percentile: float = 92.0
-
-    # Local thresholding (computed for diagnostics; combination may ignore it)
-    local_block_size: int = 35  # must be odd
-    local_offset: float = -0.01  # more negative -> more permissive
-
-    # Filament enhancement (Frangi)
-    frangi_sigmas: tuple[float, ...] = (1.0, 2.0, 3.0)
-    frangi_threshold_percentile: float = 85.0
-
-    # Cleanup
-    min_object_size: int = 20
-
-    # Presence flag
-    min_pixels_for_presence: int = 20
-
-    # Plotting
-    figure_dpi: int = 140
-    cmap: str = "gray"
-
-    # Optional (also read from YAML for :func:`zero_shot_run`)
-    verbose: bool = False
-    input_dir: Path | str = "data/separated_frames/"
-    output_dir: Path | str = "temp/"
-    max_workers: int = 6
-    # Human-readable run label; if None, :func:`process_directory` sets one from time + counts
-    run_name: str | None = None
-
-
-def filament_config_from_mapping(data: FilamentConfig | dict[str, Any]) -> FilamentConfig:
-    """Build :class:`FilamentConfig` from a mapping (e.g. YAML). Ignores unknown keys."""
-    if isinstance(data, FilamentConfig):
-        return data
-    if not isinstance(data, dict):
-        raise TypeError(f"Expected FilamentConfig or dict, got {type(data)!r}")
-    field_names = {f.name for f in dataclasses.fields(FilamentConfig)}
-    kwargs = {k: v for k, v in data.items() if k in field_names}
-    if "frangi_sigmas" in kwargs and isinstance(kwargs["frangi_sigmas"], list):
-        kwargs["frangi_sigmas"] = tuple(kwargs["frangi_sigmas"])
-    for key in ("input_dir", "output_dir"):
-        if key in kwargs and kwargs[key] is not None and not isinstance(kwargs[key], Path):
-            kwargs[key] = Path(kwargs[key])
-    return FilamentConfig(**kwargs)
-
+# Dataset layout under ``dataset_directory``; run artifacts under ``results_directory / <run_uid> /``.
+DATASET_SUBDIR_BRIGHTFIELD = "brightfield"
+DATASET_SUBDIR_GFP = "gfp"
+RUN_SUBDIR_FILAMENT_MASK = "filament_mask"
+RUN_SUBDIR_DIAGNOSTICS = "diagnostics"
 
 def default_run_name(
     started_at: datetime,
@@ -108,9 +49,12 @@ def write_run_metadata(
     n_images: int,
     n_images_with_filament: int,
     total_connected_components: int,
-    original_input_dir: str,
+    dataset_source_directory: str,
     run_dir: Path,
-    raw_inputs_dir: Path,
+    gfp_working_directory: Path,
+    brightfield_snapshot_directory: Path,
+    filament_mask_directory: Path,
+    diagnostics_directory: Path,
     pipeline_config: dict[str, Any],
 ) -> None:
     """Write a plain-text metadata file for one batch run."""
@@ -125,9 +69,12 @@ def write_run_metadata(
             f"images_processed: {n_images}",
             f"images_with_filament_present: {n_images_with_filament}",
             f"total_connected_components (sum over images): {total_connected_components}",
-            f"original_input_dir: {original_input_dir}",
+            f"dataset_source_directory: {dataset_source_directory}",
             f"run_output_dir: {run_dir.resolve()}",
-            f"raw_inputs_dir: {raw_inputs_dir.resolve()}",
+            f"gfp_working_directory (snapshot): {gfp_working_directory.resolve()}",
+            f"brightfield_snapshot_directory: {brightfield_snapshot_directory.resolve()}",
+            f"filament_mask_directory: {filament_mask_directory.resolve()}",
+            f"diagnostics_directory: {diagnostics_directory.resolve()}",
             "",
             "--- pipeline_config (JSON) ---",
             cfg_json,
@@ -256,7 +203,7 @@ def compute_summary_stats(mask: np.ndarray) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def process_image(image: np.ndarray, config: FilamentConfig) -> dict[str, Any]:
+def process_image(image: np.ndarray, config: ExperimentConfig) -> dict[str, Any]:
     """
     Run the full first-pass filament pipeline on one image.
 
@@ -323,14 +270,14 @@ def process_image(image: np.ndarray, config: FilamentConfig) -> dict[str, Any]:
     }
 
 
-def detect_filaments(image: np.ndarray, config: FilamentConfig | None = None) -> np.ndarray:
+def detect_filaments(image: np.ndarray, config: ExperimentConfig | None = None) -> np.ndarray:
     """
     Isolate filament-like structures; returns a boolean (or binary) mask.
 
     This is a thin wrapper around :func:`process_image`.
+    Dataset paths on ``config`` are ignored when only the image array is processed.
     """
-    cfg = config if config is not None else FilamentConfig()
-    return process_image(image, cfg)["final_mask"]
+    return process_image(image, config)["final_mask"]
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +386,7 @@ def save_binary_mask(mask: np.ndarray, output_path: Path | str) -> None:
 def process_time_series_image(
     image_path: Path | str,
     output_dir: Path | str,
-    config: FilamentConfig,
+    config: ExperimentConfig,
     channel: int = 1,
 ) -> dict[str, Any]:
     """
@@ -456,11 +403,14 @@ def process_time_series_image(
         image = load_image(path, channel=channel, timepoint=t)
         print(image.shape)
         results = process_image(image, config=config)
-        save_binary_mask(results["final_mask"], out / "masks" / f"{path.stem}_mask_{t}_{channel}.png")
+        save_binary_mask(
+            results["final_mask"],
+            out / RUN_SUBDIR_FILAMENT_MASK / f"{path.stem}_mask_{t}_{channel}.png",
+        )
         plot_pipeline_results(
                 results,
                 title=f"{path.stem}_{t}_{channel}",
-                save_path=out / "images" / f"{path.stem}_pipeline_{t}_{channel}.png",
+                save_path=out / RUN_SUBDIR_DIAGNOSTICS / f"{path.stem}_pipeline_{t}_{channel}.png",
                 dpi=config.figure_dpi,
                 cmap=config.cmap,
             )
@@ -469,21 +419,21 @@ def process_time_series_image(
 
 def process_single_image_file(
     image_path: Path | str,
-    output_dir: Path | str,
-    config: FilamentConfig,
+    run_dir: Path | str,
+    config: ExperimentConfig,
 ) -> dict[str, Any]:
     """
-    Run the pipeline on one file; write mask under ``output_dir/masks/`` and
-    diagnostic figure under ``output_dir/images/``.
+    Run the pipeline on one file; write mask under ``run_dir/filament_mask/`` and
+    diagnostic figure under ``run_dir/diagnostics/``.
     """
     path = Path(image_path)
-    out = Path(output_dir)
+    out = Path(run_dir)
     image = load_image(path)
     results = process_image(image, config=config)
 
     stem = path.stem
-    mask_path = out / "masks" / f"{stem}_mask.png"
-    fig_path = out / "images" / f"{stem}_pipeline.png"
+    mask_path = out / RUN_SUBDIR_FILAMENT_MASK / f"{stem}_mask.png"
+    fig_path = out / RUN_SUBDIR_DIAGNOSTICS / f"{stem}_pipeline.png"
 
     save_binary_mask(results["final_mask"], mask_path)
 
@@ -504,60 +454,68 @@ def _process_directory_worker(
     """
     Picklable worker for :func:`process_directory`.
 
-    ``payload`` is ``(image_path_str, output_dir_str, config_dict)`` with
-    ``config_dict`` from :func:`dataclasses.asdict` on :class:`FilamentConfig`.
+    ``payload`` is ``(image_path_str, run_dir_str, config_dict)`` with
+    ``run_dir_str`` the per-run artifact root (``filament_mask/``, ``diagnostics/``).
     """
     image_path_str, output_dir_str, config_dict = payload
-    cfg = FilamentConfig(**config_dict)
+    cfg = ExperimentConfig(**config_dict)
     path = Path(image_path_str)
     results = process_single_image_file(path, Path(output_dir_str), cfg)
     return path.name, results
 
 
 def process_directory(
-    input_dir: Path | str,
-    output_dir: Path | str,
-    config: FilamentConfig | dict[str, Any],
+    experiment: ExperimentConfig,
     suffixes: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".tif", ".tiff"),
     *,
-    max_workers: int = 4,
-    verbose: bool = False,
+    brightfield_subdir: str = DATASET_SUBDIR_BRIGHTFIELD,
+    gfp_subdir: str = DATASET_SUBDIR_GFP,
+    max_workers: int | None = None,
+    verbose: bool | None = None,
 ) -> dict[str, Any]:
     """
-    Run the pipeline on all matching images under ``input_dir``.
+    Run filament detection using :class:`ExperimentConfig` paths and parameters.
 
-    For each run:
+    - ``experiment.dataset_directory`` must contain ``brightfield_subdir`` and
+      ``gfp_subdir``; both are copied into ``results_directory/<run_uid>/``.
+    - Images are read from the copied ``gfp`` tree; masks go to ``filament_mask/``,
+      figures to ``diagnostics/``, and ``metadata.txt`` sits at the run root.
 
-    - A unique ``run_uid`` is generated.
-    - A per-run folder ``output_dir/<run_uid>/`` is created containing:
-      ``raw_inputs/`` (inputs **moved** here), ``masks/``, ``images/``, and
-      ``metadata.txt`` at the run root.
-
-    Returns a dict with ``run_uid``, ``run_name``, paths, ``metadata_path``, and
-    ``results`` (mapping filename -> per-image pipeline dict).
+    ``max_workers`` and ``verbose`` default to values on ``experiment`` when omitted.
     """
 
-    cfg = filament_config_from_mapping(config)
+    cfg = experiment
+    mw = cfg.max_workers if max_workers is None else max_workers
+    vb = cfg.verbose if verbose is None else verbose
 
-    if verbose:
+    if vb:
         print("-" * 50)
         print("-" * 20, " Filament detection run ", "-" * 20)
         print("-" * 50)
-        print(f"Processing directory: {input_dir}")
-        print(f"Output directory: {output_dir}")
+        print(f"Dataset directory: {cfg.dataset_directory}")
+        print(f"Results directory: {cfg.results_directory}")
         print("-" * 50)
         print(f"Config: {cfg}")
         print("-" * 50)
-        print(f"Max workers: {max_workers}")
-        print(f"Verbose: {verbose}")
+        print(f"Max workers: {mw}")
+        print(f"Verbose: {vb}")
         print("-" * 50)
 
-    in_dir = Path(input_dir).resolve()
-    out_root = Path(output_dir).resolve()
-    out_root.mkdir(parents=True, exist_ok=True)
+    dataset_root = Path(cfg.dataset_directory).resolve()
+    results_root = Path(cfg.results_directory).resolve()
+    results_root.mkdir(parents=True, exist_ok=True)
+
+    src_brightfield = dataset_root / brightfield_subdir
+    src_gfp = dataset_root / gfp_subdir
+    if not src_brightfield.is_dir():
+        raise FileNotFoundError(
+            f"Expected brightfield data at {src_brightfield}"
+        )
+    if not src_gfp.is_dir():
+        raise FileNotFoundError(f"Expected GFP data at {src_gfp}")
 
     image_paths = sorted(
-        p for p in in_dir.iterdir() if p.is_file() and p.suffix.lower() in suffixes
+        p for p in src_gfp.iterdir() if p.is_file() and p.suffix.lower() in suffixes
     )
 
     if not image_paths:
@@ -565,7 +523,11 @@ def process_directory(
             "run_uid": None,
             "run_name": None,
             "run_dir": None,
-            "raw_inputs_dir": None,
+            "dataset_source_directory": str(dataset_root),
+            "gfp_dir": None,
+            "brightfield_dir": None,
+            "filament_mask_dir": None,
+            "diagnostics_dir": None,
             "metadata_path": None,
             "results": {},
         }
@@ -574,31 +536,33 @@ def process_directory(
     started_at = datetime.now(timezone.utc)
     started_at_str = started_at.isoformat()
 
-    run_dir = out_root / run_uid
-    raw_run_dir = run_dir / "raw_inputs"
-    (run_dir / "masks").mkdir(parents=True, exist_ok=True)
-    (run_dir / "images").mkdir(parents=True, exist_ok=True)
-    raw_run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = results_root / run_uid
+    run_dir.mkdir(parents=True, exist_ok=False)
 
-    original_input_dir_str = str(in_dir)
+    dst_brightfield = run_dir / brightfield_subdir
+    dst_gfp = run_dir / gfp_subdir
+    shutil.copytree(src_brightfield, dst_brightfield)
+    shutil.copytree(src_gfp, dst_gfp)
 
-    moved_paths: list[Path] = image_paths
-    # moved_paths: list[Path] = []
-    # for p in image_paths:
-    #     dest = raw_run_dir / p.name
-    #     if dest.exists():
-    #         raise FileExistsError(f"Destination already exists (name clash): {dest}")
-    #     shutil.move(str(p.resolve()), str(dest))
-    #     moved_paths.append(dest)
+    filament_mask_dir = run_dir / RUN_SUBDIR_FILAMENT_MASK
+    diagnostics_dir = run_dir / RUN_SUBDIR_DIAGNOSTICS
+    filament_mask_dir.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+    image_paths = sorted(
+        p for p in dst_gfp.iterdir() if p.is_file() and p.suffix.lower() in suffixes
+    )
+
+    original_dataset_str = str(dataset_root)
 
     run_dir_str = str(run_dir.resolve())
     config_dict = asdict(cfg)
 
     all_results: dict[str, dict[str, Any]] = {}
 
-    if max_workers <= 1:
+    if mw <= 1:
         for image_path in tqdm(
-            moved_paths,
+            image_paths,
             desc="Processing images",
             unit="img",
         ):
@@ -606,8 +570,8 @@ def process_directory(
                 image_path, run_dir, cfg
             )
     else:
-        workers = max(1, min(max_workers, len(moved_paths)))
-        payloads = [(str(p.resolve()), run_dir_str, config_dict) for p in moved_paths]
+        workers = max(1, min(mw, len(image_paths)))
+        payloads = [(str(p.resolve()), run_dir_str, config_dict) for p in image_paths]
 
         ctx = mp.get_context("spawn")
         with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as executor:
@@ -646,9 +610,7 @@ def process_directory(
     meta_path = run_dir / "metadata.txt"
     pipeline_meta = asdict(cfg)
     for k, v in list(pipeline_meta.items()):
-        if isinstance(v, Path):
-            pipeline_meta[k] = str(v)
-        elif isinstance(v, tuple):
+        if isinstance(v, tuple):
             pipeline_meta[k] = list(v)
 
     write_run_metadata(
@@ -660,20 +622,44 @@ def process_directory(
         n_images=n_images,
         n_images_with_filament=n_with_fil,
         total_connected_components=total_components,
-        original_input_dir=original_input_dir_str,
+        dataset_source_directory=original_dataset_str,
         run_dir=run_dir,
-        raw_inputs_dir=raw_run_dir,
+        gfp_working_directory=dst_gfp,
+        brightfield_snapshot_directory=dst_brightfield,
+        filament_mask_directory=filament_mask_dir,
+        diagnostics_directory=diagnostics_dir,
         pipeline_config=pipeline_meta,
     )
+
+    print(f"Run directory: {run_dir}")
+    print(f"Dataset source directory: {dataset_root}")
+    print(f"GFP directory: {dst_gfp}")
+    print(f"Brightfield directory: {dst_brightfield}")
+    print(f"Filament mask directory: {filament_mask_dir}")
+    print(f"Diagnostics directory: {diagnostics_dir}")
+    print(f"Metadata path: {meta_path}")
+    print(f"Results: {all_results}")
 
     return {
         "run_uid": run_uid,
         "run_name": run_name,
         "run_dir": run_dir,
-        "raw_inputs_dir": raw_run_dir,
+        "dataset_source_directory": dataset_root,
+        "gfp_dir": dst_gfp,
+        "brightfield_dir": dst_brightfield,
+        "filament_mask_dir": filament_mask_dir,
+        "diagnostics_dir": diagnostics_dir,
         "metadata_path": meta_path,
         "results": all_results,
     }
+
+
+def process_experiment_run(
+    experiment: ExperimentConfig,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Alias for :func:`process_directory` (same signature)."""
+    return process_directory(experiment=experiment, **kwargs)
 
 
 def zero_shot_run():
@@ -689,23 +675,25 @@ def zero_shot_run():
             "Config file not found. Please create a config file at config/image_detection.yaml."
         ) from None
 
-    input_dir = raw_config.get("input_dir", "data/separated_frames/")
-    output_dir = raw_config.get("output_dir", "temp/")
-    max_workers = int(raw_config.get("max_workers", 6))
-    verbose = bool(raw_config.get("verbose", False))
-    cfg = filament_config_from_mapping(raw_config)
+    if not raw_config.get("dataset_directory") or not raw_config.get(
+        "results_directory"
+    ):
+        raise ValueError(
+            "YAML must define 'dataset_directory' (with brightfield/ and gfp/ subfolders) "
+            "and 'results_directory' (run UUID folders are created under it)."
+        )
 
-    batch = process_directory(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        config=cfg,
-        max_workesrs=max_workers,
-        verbose=verbose,
-    )
+    experiment = raw_config
+    batch = process_directory(experiment)
+
+    if not batch.get("run_uid"):
+        print("No matching images under dataset gfp folder; no run directory created.")
+        return batch
 
     print("Segmentation completed successfully.")
     print(f"run_uid: {batch['run_uid']}")
     print(f"run_name: {batch['run_name']}")
     print(f"Run directory: {batch['run_dir']}")
-    print(f"Raw inputs: {batch['raw_inputs_dir']}")
+    print(f"GFP snapshot (processed): {batch.get('gfp_dir')}")
+    print(f"Filament masks: {batch.get('filament_mask_dir')}")
     print(f"Metadata: {batch['metadata_path']}")

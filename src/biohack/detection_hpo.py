@@ -2,15 +2,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
-from src.biohack.utils import read_yaml
+from biohack.utils import read_yaml
 import optuna
 import numpy as np
 from optuna.samplers import TPESampler
 
-# Import your existing pipeline code here
-# Adjust this import path to your project structure.
-from src.biohack.image_detection import (
-    FilamentConfig,
+from biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+from biohack.image_detection import (
     ensure_grayscale_float,
     robust_normalize,
     denoise_image,
@@ -98,7 +96,7 @@ CLEANUP_OBJECTIVE_METRIC = "f0_5"
 PRESENCE_OBJECTIVE_METRIC = "f0_5"
 
 # Default fixed config values used unless tuned in a given study
-BASE_CONFIG = FilamentConfig(**read_yaml("config/image_detection.yaml"))
+BASE_CONFIG = experiment_config_from_mapping(read_yaml("config/image_detection.yaml"))
 
 # ============================================================
 # DATASET LOADING
@@ -249,7 +247,7 @@ def load_dataset_from_dirs(
 
 
 def build_raw_segmentation_mask(
-    image: np.ndarray, config: FilamentConfig
+    image: np.ndarray, config: ExperimentConfig
 ) -> np.ndarray:
     """
     Returns combined_mask from your current pipeline.
@@ -296,7 +294,7 @@ def build_raw_segmentation_mask(
     return combined_mask
 
 
-def build_cleaned_mask(image: np.ndarray, config: FilamentConfig) -> np.ndarray:
+def build_cleaned_mask(image: np.ndarray, config: ExperimentConfig) -> np.ndarray:
     raw_mask = build_raw_segmentation_mask(image, config)
     return cleanup_mask(raw_mask, min_object_size=config.min_object_size)
 
@@ -454,7 +452,7 @@ def aggregate_metric_dicts(metric_dicts: list[dict[str, float]]) -> dict[str, fl
 
 def make_raw_objective(
     dataset: list[dict[str, Any]],
-    base_config: FilamentConfig,
+    base_config: ExperimentConfig,
     search_space: dict[str, dict[str, Any]],
     objective_metric: str = "f0_5",
 ) -> Callable[[optuna.Trial], float]:
@@ -485,7 +483,7 @@ def make_raw_objective(
 
 def make_cleanup_objective(
     dataset: list[dict[str, Any]],
-    base_config: FilamentConfig,
+    base_config: ExperimentConfig,
     search_space: dict[str, dict[str, Any]],
     objective_metric: str = "f0_5",
 ) -> Callable[[optuna.Trial], float]:
@@ -516,7 +514,7 @@ def make_cleanup_objective(
 
 def make_presence_objective(
     dataset: list[dict[str, Any]],
-    base_config: FilamentConfig,
+    base_config: ExperimentConfig,
     search_space: dict[str, dict[str, Any]],
     objective_metric: str = "f0_5",
 ) -> Callable[[optuna.Trial], float]:
@@ -564,7 +562,7 @@ def make_presence_objective(
 
 def run_raw_study(
     dataset: list[dict[str, Any]],
-    base_config: FilamentConfig = BASE_CONFIG,
+    base_config: ExperimentConfig = BASE_CONFIG,
     search_space: dict[str, dict[str, Any]] = RAW_SEARCH_SPACE,
     n_trials: int = 100,
     study_name: str = "raw_segmentation",
@@ -599,7 +597,7 @@ def run_raw_study(
 
 def run_cleanup_study(
     dataset: list[dict[str, Any]],
-    tuned_raw_config: FilamentConfig,
+    tuned_raw_config: ExperimentConfig,
     search_space: dict[str, dict[str, Any]] = CLEANUP_SEARCH_SPACE,
     n_trials: int = 50,
     study_name: str = "cleanup",
@@ -634,7 +632,7 @@ def run_cleanup_study(
 
 def run_presence_study(
     dataset: list[dict[str, Any]],
-    tuned_mask_config: FilamentConfig,
+    tuned_mask_config: ExperimentConfig,
     search_space: dict[str, dict[str, Any]] = PRESENCE_SEARCH_SPACE,
     n_trials: int = 50,
     study_name: str = "presence",
@@ -673,8 +671,8 @@ def run_presence_study(
 
 
 def config_from_best_params(
-    base_config: FilamentConfig, best_params: dict[str, Any]
-) -> FilamentConfig:
+    base_config: ExperimentConfig, best_params: dict[str, Any]
+) -> ExperimentConfig:
     return replace(base_config, **best_params)
 
 

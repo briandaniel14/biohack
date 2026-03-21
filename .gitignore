@@ -9,6 +9,8 @@ outputs/
 
 .venv/
 .DS_Store
+temp/**
+data/**
 data/ch20_URA7_URA8_001-crop1/frames/
 data/ch20_URA7_URA8_001-crop2/frames/
 data/ch20_URA7_URA8_001-crop3/frames/
