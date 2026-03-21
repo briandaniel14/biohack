@@ -6,6 +6,9 @@
 uv.lock
 .ruff_cache
 outputs/
+.DS_Store
+node_modules/
+dist/
 
 .venv/
 .DS_Store

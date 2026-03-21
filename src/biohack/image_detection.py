@@ -530,7 +530,7 @@ def process_directory(
 
     - A unique ``run_uid`` is generated.
     - A per-run folder ``output_dir/<run_uid>/`` is created containing:
-      ``raw_inputs/`` (inputs **moved** here), ``masks/``, ``images/``, and
+      ``raw_inputs/`` (inputs **copied** here), ``masks/``, ``images/``, and
       ``metadata.txt`` at the run root.
 
     Returns a dict with ``run_uid``, ``run_name``, paths, ``metadata_path``, and
@@ -582,14 +582,13 @@ def process_directory(
 
     original_input_dir_str = str(in_dir)
 
-    moved_paths: list[Path] = image_paths
-    # moved_paths: list[Path] = []
-    # for p in image_paths:
-    #     dest = raw_run_dir / p.name
-    #     if dest.exists():
-    #         raise FileExistsError(f"Destination already exists (name clash): {dest}")
-    #     shutil.move(str(p.resolve()), str(dest))
-    #     moved_paths.append(dest)
+    copied_paths: list[Path] = []
+    for p in image_paths:
+        dest = raw_run_dir / p.name
+        if dest.exists():
+            raise FileExistsError(f"Destination already exists (name clash): {dest}")
+        shutil.copy2(str(p.resolve()), str(dest))
+        copied_paths.append(dest)
 
     run_dir_str = str(run_dir.resolve())
     config_dict = asdict(cfg)
@@ -598,7 +597,7 @@ def process_directory(
 
     if max_workers <= 1:
         for image_path in tqdm(
-            moved_paths,
+            copied_paths,
             desc="Processing images",
             unit="img",
         ):
@@ -606,8 +605,8 @@ def process_directory(
                 image_path, run_dir, cfg
             )
     else:
-        workers = max(1, min(max_workers, len(moved_paths)))
-        payloads = [(str(p.resolve()), run_dir_str, config_dict) for p in moved_paths]
+        workers = max(1, min(max_workers, len(copied_paths)))
+        payloads = [(str(p.resolve()), run_dir_str, config_dict) for p in copied_paths]
 
         ctx = mp.get_context("spawn")
         with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as executor:
@@ -699,7 +698,7 @@ def zero_shot_run():
         input_dir=input_dir,
         output_dir=output_dir,
         config=cfg,
-        max_workesrs=max_workers,
+        max_workers=max_workers,
         verbose=verbose,
     )
 
