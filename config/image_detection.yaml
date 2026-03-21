@@ -29,3 +29,10 @@ min_pixels_for_presence: 20
 figure_dpi: 140
 # Colormap used for displaying images. Typically "gray" for fluorescence microscopy. Switching changes visual appearance only.
 cmap: "gray"
+
+# Optional
+verbose: true
+input_dir: "data/separated_frames/"
+output_dir: "temp/"
+max_workers: 6
+run_name: "test_run"
