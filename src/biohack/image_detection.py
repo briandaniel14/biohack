@@ -421,9 +421,12 @@ def plot_pipeline_results(
 # ---------------------------------------------------------------------------
 
 
-def load_image(image_path: Path | str) -> np.ndarray:
+def load_image(image_path: Path | str, channel: int = None, timepoint: int = None) -> np.ndarray:
     """Load image from disk."""
-    return io.imread(str(image_path))
+    image = io.imread(str(image_path))
+    if image.ndim == 4 and channel is not None and timepoint is not None:
+        image = image[timepoint,channel,:,:]
+    return image
 
 
 def save_binary_mask(mask: np.ndarray, output_path: Path | str) -> None:
@@ -432,6 +435,37 @@ def save_binary_mask(mask: np.ndarray, output_path: Path | str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     io.imsave(str(path), (mask.astype(np.uint8) * 255), check_contrast=False)
 
+
+def process_time_series_image(
+    image_path: Path | str,
+    output_dir: Path | str,
+    config: FilamentConfig,
+    channel: int = 1,
+) -> dict[str, Any]:
+    """
+    Run the pipeline on a time series image.
+    """
+    path = Path(image_path)
+    out = Path(output_dir)
+    base_image = load_image(path)
+    temporal_length = base_image.shape[0]
+    print(temporal_length)
+    results_dict = {}
+    for t in range(temporal_length):
+        print(t)
+        image = load_image(path, channel=channel, timepoint=t)
+        print(image.shape)
+        results = process_image(image, config=config)
+        save_binary_mask(results["final_mask"], out / "masks" / f"{path.stem}_mask_{t}_{channel}.png")
+        plot_pipeline_results(
+                results,
+                title=f"{path.stem}_{t}_{channel}",
+                save_path=out / "images" / f"{path.stem}_pipeline_{t}_{channel}.png",
+                dpi=config.figure_dpi,
+                cmap=config.cmap,
+            )
+        results_dict[t] = results
+    return results_dict
 
 def process_single_image_file(
     image_path: Path | str,
@@ -548,13 +582,13 @@ def process_directory(
 
     original_input_dir_str = str(in_dir)
 
-    moved_paths: list[Path] = []
-    for p in image_paths:
-        dest = raw_run_dir / p.name
-        if dest.exists():
-            raise FileExistsError(f"Destination already exists (name clash): {dest}")
-        shutil.move(str(p.resolve()), str(dest))
-        moved_paths.append(dest)
+    # moved_paths: list[Path] = []
+    # for p in image_paths:
+    #     dest = raw_run_dir / p.name
+    #     if dest.exists():
+    #         raise FileExistsError(f"Destination already exists (name clash): {dest}")
+    #     shutil.move(str(p.resolve()), str(dest))
+    #     moved_paths.append(dest)
 
     run_dir_str = str(run_dir.resolve())
     config_dict = asdict(cfg)
