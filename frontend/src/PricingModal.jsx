@@ -55,13 +55,13 @@ export default function PricingModal({ open, onClose }) {
         </button>
 
         {/* Header */}
-        <div className="px-8 pt-8 pb-4 text-center">
+        <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-4 text-center">
           <h2 className="text-2xl font-bold text-white">Choose Your Plan</h2>
           <p className="text-sm text-gray-400 mt-1">Unlock the full power of Filament Detection</p>
         </div>
 
         {/* Plans */}
-        <div className="px-8 pb-8 grid grid-cols-2 gap-4">
+        <div className="px-4 sm:px-8 pb-6 sm:pb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Free */}
           <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-6 flex flex-col">
             <h3 className="text-lg font-semibold text-gray-200">Free</h3>

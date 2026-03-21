@@ -1,7 +1,7 @@
 import Papa from 'papaparse'
 
 const FRAME_COUNT = 100
-const FRAME_INTERVAL_MIN = 14.4
+const FRAME_INTERVAL_MIN = 15
 const PX_TO_UM = 0.3
 
 export async function loadDatasets() {

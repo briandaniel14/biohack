@@ -83,7 +83,7 @@ export default function UploadPage({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top: Upload — full width */}
-      <div className="flex-none p-6 pb-0">
+      <div className="flex-none p-4 sm:p-6 pb-0">
         <div className="max-w-5xl mx-auto rounded-xl border border-gray-800 bg-gray-900/60 overflow-hidden">
           <div className="px-6 py-3.5 border-b border-gray-800 flex items-center justify-between">
             <div>
@@ -140,8 +140,8 @@ export default function UploadPage({
       </div>
 
       {/* Bottom: Two-column split — Files + Runs */}
-      <div className="flex-1 min-h-0 p-6">
-        <div className="max-w-5xl mx-auto h-full flex gap-6">
+      <div className="flex-1 min-h-0 p-4 sm:p-6">
+        <div className="max-w-5xl mx-auto h-full flex flex-col md:flex-row gap-4 md:gap-6">
 
           {/* Left: Previous Files */}
           <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-gray-800 bg-gray-900/60 overflow-hidden">
@@ -254,7 +254,7 @@ export default function UploadPage({
       </div>
 
       {/* Bottom bar */}
-      <div className="flex-none p-6 pt-0">
+      <div className="flex-none p-4 sm:p-6 pt-0">
         <div className="max-w-5xl mx-auto">
           <button
             onClick={onNavigateTuning}

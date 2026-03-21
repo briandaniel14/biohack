@@ -107,9 +107,9 @@ export default function TuningPage({
 
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex-1 flex flex-col lg:flex-row min-h-0">
       {/* LEFT: Image + Controls */}
-      <div className="w-[42%] flex flex-col min-h-0 border-r border-gray-800">
+      <div className="w-full lg:w-[42%] flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-gray-800">
         {/* Image */}
         <div className="flex-1 min-h-0 bg-black flex items-center justify-center p-4">
           {loading ? (
@@ -131,9 +131,9 @@ export default function TuningPage({
         </div>
 
         {/* Controls Card */}
-        <div className="flex-none border-t border-gray-800 bg-gray-900/80 p-4 space-y-3">
+        <div className="flex-none border-t border-gray-800 bg-gray-900/80 p-3 sm:p-4 space-y-3">
           {/* Frame info */}
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span>
               Frame <span className="font-mono font-semibold text-white">{frame}</span>
               <span className="text-gray-500"> / {frameCount - 1}</span>
@@ -165,7 +165,7 @@ export default function TuningPage({
           />
 
           {/* Transport controls */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button onClick={() => { setFrame(0); setPlaying(false) }}
               className="p-1.5 rounded-md bg-gray-800 hover:bg-gray-700 transition-colors" title="Restart">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
@@ -213,7 +213,7 @@ export default function TuningPage({
         </div>
 
         {/* Bottom actions */}
-        <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 space-y-2">
+        <div className="flex-none p-3 sm:p-4 border-t border-gray-800 bg-gray-900/80 space-y-2">
           <div className="flex items-center gap-2">
             <input
               type="text"

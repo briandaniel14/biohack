@@ -16,6 +16,7 @@ export default function App() {
   const [datasets, setDatasets] = useState([])
   const [currentDataset, setCurrentDataset] = useState(null)
   const [showPricing, setShowPricing] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   // Pipeline jobs — supports concurrent runs, persists across page refresh
   const [pipelineJobs, setPipelineJobs] = useState(() => {
@@ -104,11 +105,11 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
       {/* Header */}
-      <header className="flex-none px-5 py-2.5 bg-gray-900 border-b border-gray-800 flex items-center gap-4">
-        <img src="/logo.png?v=2" alt="Logo" className="w-9 h-9" />
-        <h1 className="text-base font-semibold text-white tracking-tight">Filament Detection</h1>
-        <div className="h-5 w-px bg-gray-800 mx-1" />
-        <nav className="flex gap-0.5">
+      <header className="flex-none px-4 sm:px-5 py-2.5 bg-gray-900 border-b border-gray-800 flex items-center gap-3 sm:gap-4 relative">
+        <img src="/logo.png?v=2" alt="Logo" className="w-8 h-8 sm:w-9 sm:h-9" />
+        <h1 className="text-sm sm:text-base font-semibold text-white tracking-tight">Filament Detection</h1>
+        <div className="hidden md:block h-5 w-px bg-gray-800 mx-1" />
+        <nav className="hidden md:flex gap-0.5">
           {PAGES.map((p, i) => (
             <button
               key={p.key}
@@ -127,22 +128,70 @@ export default function App() {
           ))}
         </nav>
         {currentDataset && (
-          <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
+          <div className="hidden lg:flex items-center gap-2 text-xs text-gray-400 ml-2">
             <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
             <span className="truncate max-w-[200px]">{currentDataset.name}</span>
           </div>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setShowPricing(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium shadow-sm shadow-blue-700/25 transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium shadow-sm shadow-blue-700/25 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             Upgrade
           </button>
+          {/* Hamburger menu — mobile only */}
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="md:hidden p-1.5 rounded-md text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              {menuOpen
+                ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              }
+            </svg>
+          </button>
         </div>
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div className="md:hidden absolute top-full left-0 right-0 bg-gray-900 border-b border-gray-800 z-50 px-4 py-2 space-y-1">
+            {PAGES.map(p => (
+              <button
+                key={p.key}
+                onClick={() => { navigateTo(p.key); setMenuOpen(false) }}
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                  page === p.key
+                    ? 'bg-blue-700 text-white'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d={p.icon} />
+                </svg>
+                {p.label}
+              </button>
+            ))}
+            {currentDataset && (
+              <div className="flex items-center gap-2 text-xs text-gray-400 px-3 py-1.5 border-t border-gray-800 mt-1 pt-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span className="truncate">{currentDataset.name}</span>
+              </div>
+            )}
+            <button
+              onClick={() => { setShowPricing(true); setMenuOpen(false) }}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white transition-colors mt-1"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Upgrade
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Page content */}

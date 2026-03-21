@@ -92,7 +92,7 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
   }, [rows, frames])
 
   return (
-    <div className="grid grid-cols-2 grid-rows-2 gap-1 p-2 h-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 h-full">
       {/* Chart 1: Filament length */}
       <ChartPanel title="Filament Length Over Time">
         <ResponsiveContainer width="100%" height="100%">

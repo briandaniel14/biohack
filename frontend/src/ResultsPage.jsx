@@ -290,9 +290,9 @@ export default function ResultsPage({
   )
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-auto lg:overflow-hidden">
       {/* LEFT: Image + Controls */}
-      <div className="w-[42%] flex flex-col min-h-0 border-r border-gray-800">
+      <div className="w-full lg:w-[42%] flex flex-col shrink-0 lg:shrink lg:min-h-0 border-b lg:border-b-0 lg:border-r border-gray-800">
         {/* Image */}
         <div className="flex-1 min-h-0 bg-black flex items-center justify-center p-4">
           {loading ? (
@@ -307,7 +307,7 @@ export default function ResultsPage({
               src={getFrameUrl(currentDataset.id, frame, viewMode)}
               alt={`Frame ${frame}`}
               className="w-full max-h-full cursor-crosshair"
-              style={{ imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: viewMode === 'diagnostic' ? 'auto' : '1 / 1' }}
+              style={{ imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: '1 / 1', objectFit: 'contain' }}
               onClick={handleFrameClick}
               onError={() => setImgError(true)}
             />
@@ -315,9 +315,9 @@ export default function ResultsPage({
         </div>
 
         {/* Controls */}
-        <div className="flex-none border-t border-gray-800 bg-gray-900/80 p-4 space-y-3">
+        <div className="flex-none border-t border-gray-800 bg-gray-900/80 p-3 sm:p-4 space-y-3">
           {/* Frame info */}
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span>
               Frame <span className="font-mono font-semibold text-white">{frame}</span>
               <span className="text-gray-500"> / {frameCount - 1}</span>
@@ -349,7 +349,7 @@ export default function ResultsPage({
           />
 
           {/* Transport controls */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button onClick={() => { setFrame(0); setPlaying(false) }}
               className="p-1.5 rounded-md bg-gray-800 hover:bg-gray-700 transition-colors" title="Restart">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
@@ -390,12 +390,12 @@ export default function ResultsPage({
       </div>
 
       {/* RIGHT: Track Inspector + Charts */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col shrink-0 lg:shrink lg:min-h-0">
         {/* Run name */}
         <div className="flex-none px-4 pt-3 pb-2 border-b border-gray-800 bg-gray-900/80">
           <p className="text-sm text-gray-200 truncate px-3 py-1.5">{summary?.run_name || currentDataset.name}</p>
         </div>
-        <div className="flex-none border-b border-gray-800" style={{ height: '45%' }}>
+        <div className="flex-none border-b border-gray-800 min-h-[250px]" style={{ height: '45%' }}>
           <TrackInspector
             filamentSummary={filamentSummary}
             rows={rows}
@@ -406,7 +406,7 @@ export default function ResultsPage({
             onFilterChange={setFilteredFilamentIds}
           />
         </div>
-        <div className="flex-1 min-h-0" ref={chartsRef}>
+        <div className="flex-1 min-h-[400px] lg:min-h-0" ref={chartsRef}>
           <MetricsDashboard
             rows={rows}
             filamentSummary={filamentSummary}
@@ -415,7 +415,7 @@ export default function ResultsPage({
           />
         </div>
         {/* Download buttons */}
-        <div className="flex-none p-4 border-t border-gray-800 bg-gray-900/80 flex gap-2">
+        <div className="flex-none p-3 sm:p-4 border-t border-gray-800 bg-gray-900/80 flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => handleDownload('results')}
             disabled={!!downloading}

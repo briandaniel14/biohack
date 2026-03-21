@@ -60,8 +60,8 @@ export default function HyperparamPanel({ onChange }) {
       </div>
       <div className="flex-1 overflow-auto min-h-0 p-4 space-y-2">
         {PARAMS.map(p => (
-          <div key={p.key} className="rounded-lg bg-gray-800/40 px-3 py-2 flex items-center gap-3">
-            <label className="w-[170px] shrink-0 text-xs text-gray-300 font-medium flex items-center gap-1 whitespace-nowrap">
+          <div key={p.key} className="rounded-lg bg-gray-800/40 px-3 py-2 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+            <label className="w-full sm:w-[170px] shrink-0 text-xs text-gray-300 font-medium flex items-center gap-1 whitespace-nowrap">
               {p.label}
               <span
                 className="text-gray-500 hover:text-blue-400 cursor-help text-[10px] transition-colors"

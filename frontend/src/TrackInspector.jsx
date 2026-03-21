@@ -195,7 +195,7 @@ export default function TrackInspector({
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs mb-3">
             <div>
               <span className="text-gray-500">Frames:</span>{' '}
               <span className="font-mono">{selectedFilament.first_frame} → {selectedFilament.last_frame}</span>
