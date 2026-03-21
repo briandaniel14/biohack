@@ -351,9 +351,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate synthetic URA7/URA8 yeast cell + filament data"
     )
-    parser.add_argument("--output_dir", type=str, default="./synthetic_data")
+    parser.add_argument("--output_dir", type=str, default="./synthetic_data/")
     parser.add_argument("--n_samples", type=int, default=200)
-    parser.add_argument("--filament_fraction", type=float, default=0.6)
+    parser.add_argument("--filament_fraction", type=float, default=0.16)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
