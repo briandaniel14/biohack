@@ -35,24 +35,34 @@ dataset_directory: "data/separated_frames"
 # Runs are written to ``<results_directory>/<run_uuid>/`` (filament_mask/, diagnostics/, copies of bf/gfp).
 results_directory: "temp/results"
 
+# When true, print progress (paths found per movie, saves, warnings). Set false for quieter logs in batch jobs.
 verbose: true
+# Number of parallel worker processes for filament detection over many images. Higher can speed up I/O-bound runs; too high may exhaust RAM or GPU context switches if models load per worker.
 max_workers: 6
+# Human-readable label stored in run metadata alongside the UUID; does not change on-disk layout.
 run_name: "test_run"
 
 model_type_bf: "cyto3"
 model_type_gfp: "cyto3"
-# Use YAML ``null`` (not the word None) so parsers do not treat it as the string "None".
 diameter_bf: null
 diameter_gfp: null
 channels_bf: [0, 0]
 channels_gfp: [0, 0]
-use_gpu: False
+use_gpu: false
 pillar_iou_threshold: 0.10
 min_area_bf: 50
 min_area_gfp: 20
-use_existing_cell_masks: False
+use_existing_cell_masks: false
 max_link_distance: 60
 min_overlap_fraction: 0.15
 bud_distance: 35
 bud_overlap_fraction: 0.05
 max_filament_gap: 1
+
+# If true, drop cell tracks matching the v3_aggressive pillar rule before filament assignment; writes ``removed_pillar_tracks_v3.csv`` under statistics/.
+remove_pillar_tracks: false
+pillar_v3_min_track_frames: 3
+pillar_v3_max_motion_std: 3.0
+pillar_v3_min_eccentricity: 0.68
+pillar_v3_min_aspect_ratio: 1.35
+pillar_v3_min_solidity: 0.94
