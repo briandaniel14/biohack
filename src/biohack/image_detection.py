@@ -21,11 +21,14 @@ from tqdm.auto import tqdm
 from src.biohack.experiment_config import ExperimentConfig
 from src.biohack.utils import read_yaml
 
+from src.biohack.constants import (
+    DATASET_SUBDIR_BRIGHTFIELD,
+    DATASET_SUBDIR_GFP,
+    RUN_SUBDIR_FILAMENT_MASK,
+    RUN_SUBDIR_DIAGNOSTICS,
+)
+
 # Dataset layout under ``dataset_directory``; run artifacts under ``results_directory / <run_uid> /``.
-DATASET_SUBDIR_BRIGHTFIELD = "brightfield"
-DATASET_SUBDIR_GFP = "gfp"
-RUN_SUBDIR_FILAMENT_MASK = "filament_mask"
-RUN_SUBDIR_DIAGNOSTICS = "diagnostics"
 
 def default_run_name(
     started_at: datetime,

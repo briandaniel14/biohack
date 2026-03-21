@@ -1,10 +1,10 @@
 import os
+import uuid
+from pathlib import Path
 
 import numpy as np
 from tifffile import imread, imwrite
 
-from pathlib import Path
-import uuid
 
 
 def split_stack(img: np.ndarray, *, verbose: bool = False) -> np.ndarray:
