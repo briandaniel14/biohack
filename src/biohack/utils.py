@@ -1,10 +1,7 @@
 from pathlib import Path
 import yaml
 import numpy as np
-try:
-    from IPython.display import display
-except ImportError:
-    display = print
+from IPython.display import display
 from PIL import Image
 
 

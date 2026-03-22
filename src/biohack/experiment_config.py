@@ -108,14 +108,9 @@ class ExperimentConfig:
                 float(x) for x in cast(list[Any], self.frangi_sigmas)
             )
 
-    @classmethod
-    def from_dict(cls, mapping: Mapping[str, Any]) -> "ExperimentConfig":
-        """Alias for :func:`experiment_config_from_mapping`."""
-        return experiment_config_from_mapping(mapping)
-
-
-def experiment_config_from_mapping(mapping: Mapping[str, Any]) -> ExperimentConfig:
+@classmethod
+def from_dict(cls, mapping: Mapping[str, Any]) -> ExperimentConfig:
     """Build :class:`ExperimentConfig` from a YAML/dict, ignoring unknown keys."""
     known = {f.name for f in fields(ExperimentConfig)}
     kwargs = {k: v for k, v in mapping.items() if k in known}
-    return ExperimentConfig(**kwargs)
+    return cls(**kwargs)

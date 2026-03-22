@@ -475,14 +475,22 @@ def process_directory(
     gfp_subdir: str = DATASET_SUBDIR_GFP,
     max_workers: int | None = None,
     verbose: bool | None = None,
+    run_uid: str | None = None,
 ) -> dict[str, Any]:
     """
     Run filament detection using :class:`ExperimentConfig` paths and parameters.
 
-    - ``experiment.dataset_directory`` must contain ``brightfield_subdir`` and
-      ``gfp_subdir``; both are copied into ``results_directory/<run_uid>/``.
-    - Images are read from the copied ``gfp`` tree; masks go to ``filament_mask/``,
-      figures to ``diagnostics/``, and ``metadata.txt`` sits at the run root.
+    - On a **new** run (no existing ``results_directory/<run_uid>/``): copies
+      ``brightfield_subdir`` and ``gfp_subdir`` from ``dataset_directory`` into
+      the run folder. That snapshot is never overwritten on later calls.
+    - On **reuse** (same ``run_uid`` and the run folder already contains the BF/GFP
+      snapshot): skips copying and only refreshes segmentation outputs under
+      ``filament_mask/`` and ``diagnostics/``. Other subfolders (e.g.
+      ``statistics/``, ``cellpose_mask/``) are left unchanged.
+    - If ``run_uid`` is omitted, a new UUID is used (always a fresh snapshot copy).
+
+    Images are always read from the run’s ``gfp`` snapshot. ``metadata.txt`` is
+    rewritten after each segmentation pass.
 
     ``max_workers`` and ``verbose`` default to values on ``experiment`` when omitted.
     """
@@ -510,51 +518,83 @@ def process_directory(
 
     src_brightfield = dataset_root / brightfield_subdir
     src_gfp = dataset_root / gfp_subdir
-    if not src_brightfield.is_dir():
-        raise FileNotFoundError(
-            f"Expected brightfield data at {src_brightfield}"
+
+    if run_uid is not None:
+        run_uid_final = run_uid
+    else:
+        run_uid_final = str(uuid.uuid4())
+
+    run_dir = results_root / run_uid_final
+    reuse_snapshot = False
+
+    if run_dir.exists():
+        if not run_dir.is_dir():
+            raise NotADirectoryError(f"Run path exists but is not a directory: {run_dir}")
+        dst_brightfield = run_dir / brightfield_subdir
+        dst_gfp = run_dir / gfp_subdir
+        if not dst_brightfield.is_dir() or not dst_gfp.is_dir():
+            raise FileNotFoundError(
+                f"Run directory {run_dir} exists but is missing a brightfield or gfp "
+                "snapshot subdirectory; refusing to copy over it."
+            )
+        reuse_snapshot = True
+    else:
+        if not src_brightfield.is_dir():
+            raise FileNotFoundError(
+                f"Expected brightfield data at {src_brightfield}"
+            )
+        if not src_gfp.is_dir():
+            raise FileNotFoundError(f"Expected GFP data at {src_gfp}")
+
+        src_image_paths = sorted(
+            p
+            for p in src_gfp.iterdir()
+            if p.is_file() and p.suffix.lower() in suffixes
         )
-    if not src_gfp.is_dir():
-        raise FileNotFoundError(f"Expected GFP data at {src_gfp}")
 
-    image_paths = sorted(
-        p for p in src_gfp.iterdir() if p.is_file() and p.suffix.lower() in suffixes
-    )
+        if not src_image_paths:
+            return {
+                "run_uid": None,
+                "run_name": None,
+                "run_dir": None,
+                "dataset_source_directory": str(dataset_root),
+                "gfp_dir": None,
+                "brightfield_dir": None,
+                "filament_mask_dir": None,
+                "diagnostics_dir": None,
+                "metadata_path": None,
+                "results": {},
+                "segmentation_snapshot_reused": False,
+            }
 
-    if not image_paths:
-        return {
-            "run_uid": None,
-            "run_name": None,
-            "run_dir": None,
-            "dataset_source_directory": str(dataset_root),
-            "gfp_dir": None,
-            "brightfield_dir": None,
-            "filament_mask_dir": None,
-            "diagnostics_dir": None,
-            "metadata_path": None,
-            "results": {},
-        }
+        run_dir.mkdir(parents=True, exist_ok=False)
+        dst_brightfield = run_dir / brightfield_subdir
+        dst_gfp = run_dir / gfp_subdir
+        shutil.copytree(src_brightfield, dst_brightfield)
+        shutil.copytree(src_gfp, dst_gfp)
 
-    run_uid = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     started_at_str = started_at.isoformat()
 
-    run_dir = results_root / run_uid
-    run_dir.mkdir(parents=True, exist_ok=False)
-
-    dst_brightfield = run_dir / brightfield_subdir
-    dst_gfp = run_dir / gfp_subdir
-    shutil.copytree(src_brightfield, dst_brightfield)
-    shutil.copytree(src_gfp, dst_gfp)
-
     filament_mask_dir = run_dir / RUN_SUBDIR_FILAMENT_MASK
     diagnostics_dir = run_dir / RUN_SUBDIR_DIAGNOSTICS
+    if reuse_snapshot:
+        if filament_mask_dir.is_dir():
+            shutil.rmtree(filament_mask_dir)
+        if diagnostics_dir.is_dir():
+            shutil.rmtree(diagnostics_dir)
     filament_mask_dir.mkdir(parents=True, exist_ok=True)
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
     image_paths = sorted(
         p for p in dst_gfp.iterdir() if p.is_file() and p.suffix.lower() in suffixes
     )
+
+    if not image_paths:
+        raise RuntimeError(
+            f"No images matching {suffixes!r} under GFP snapshot {dst_gfp}; "
+            "cannot run segmentation."
+        )
 
     original_dataset_str = str(dataset_root)
 
@@ -618,7 +658,7 @@ def process_directory(
 
     write_run_metadata(
         meta_path,
-        run_uid=run_uid,
+        run_uid=run_uid_final,
         run_name=run_name,
         started_at_utc=started_at_str,
         finished_at_utc=finished_at_str,
@@ -644,7 +684,7 @@ def process_directory(
     print(f"Results: {all_results}")
 
     return {
-        "run_uid": run_uid,
+        "run_uid": run_uid_final,
         "run_name": run_name,
         "run_dir": run_dir,
         "dataset_source_directory": dataset_root,
@@ -654,49 +694,6 @@ def process_directory(
         "diagnostics_dir": diagnostics_dir,
         "metadata_path": meta_path,
         "results": all_results,
+        "segmentation_snapshot_reused": reuse_snapshot,
     }
 
-
-def process_experiment_run(
-    experiment: ExperimentConfig,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Alias for :func:`process_directory` (same signature)."""
-    return process_directory(experiment=experiment, **kwargs)
-
-
-def zero_shot_run():
-    """
-    Run entire extraction pipeline without having to set any parameters or paths.
-    Any parameters or paths will be read from the config file.
-    """
-
-    try:
-        raw_config = read_yaml("config/image_detection.yaml")
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            "Config file not found. Please create a config file at config/image_detection.yaml."
-        ) from None
-
-    if not raw_config.get("dataset_directory") or not raw_config.get(
-        "results_directory"
-    ):
-        raise ValueError(
-            "YAML must define 'dataset_directory' (with brightfield/ and gfp/ subfolders) "
-            "and 'results_directory' (run UUID folders are created under it)."
-        )
-
-    experiment = raw_config
-    batch = process_directory(experiment)
-
-    if not batch.get("run_uid"):
-        print("No matching images under dataset gfp folder; no run directory created.")
-        return batch
-
-    print("Segmentation completed successfully.")
-    print(f"run_uid: {batch['run_uid']}")
-    print(f"run_name: {batch['run_name']}")
-    print(f"Run directory: {batch['run_dir']}")
-    print(f"GFP snapshot (processed): {batch.get('gfp_dir')}")
-    print(f"Filament masks: {batch.get('filament_mask_dir')}")
-    print(f"Metadata: {batch['metadata_path']}")

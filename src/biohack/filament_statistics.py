@@ -430,24 +430,21 @@ def run_filament_pipeline(
 
     cell_lineage_df = build_cell_lineage_table(cell_tracks_df)
 
-    if len(filament_episodes_df) > 0:
+    if len(cell_lineage_df) > 0 and len(filament_episodes_df) > 0:
         filament_episodes_with_lineage_df = filament_episodes_df.merge(
             cell_lineage_df,
             on=["movie", "cell_ID"],
             how="left",
         )
+        filament_episodes_with_lineage_df["time_of_appearance_viewer"] = (
+            filament_episodes_with_lineage_df["time_of_appearance"]
+        )
+        filament_episodes_with_lineage_df["last_seen_frame_viewer"] = (
+            filament_episodes_with_lineage_df["last_seen_frame"]
+        )
     else:
-        filament_episodes_with_lineage_df = filament_episodes_df.copy()
-        for col in ["mother_cell_ID"]:
-            if col not in filament_episodes_with_lineage_df.columns:
-                filament_episodes_with_lineage_df[col] = pd.Series(dtype="object")
+        filament_episodes_with_lineage_df = pd.DataFrame()	
 
-    filament_episodes_with_lineage_df["time_of_appearance_viewer"] = (
-        filament_episodes_with_lineage_df["time_of_appearance"]
-    )
-    filament_episodes_with_lineage_df["last_seen_frame_viewer"] = (
-        filament_episodes_with_lineage_df["last_seen_frame"]
-    )
 
     lin_csv = os.path.join(output_dir, "filament_episodes_with_lineage.csv")
     filament_episodes_with_lineage_df.to_csv(lin_csv, index=False)

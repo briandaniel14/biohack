@@ -679,12 +679,12 @@ def build_filament_episodes(
     df = cell_tracks_with_filaments_df.copy()
 
     if "filament_present" not in df.columns:
-        return pd.DataFrame(columns=df.columns), pd.DataFrame(columns=["movie", "cell_ID", "filament_ID", "time_of_appearance", "last_seen_frame", "duration_frames", "filament_count", "mean_length_px", "mean_area_px"])
+        return pd.DataFrame(), pd.DataFrame()
 
     df = df[df["filament_present"] == 1].copy()
 
     if len(df) == 0:
-        return pd.DataFrame(columns=df.columns), pd.DataFrame(columns=["movie", "cell_ID", "filament_ID", "time_of_appearance", "last_seen_frame", "duration_frames", "filament_count", "mean_length_px", "mean_area_px"])
+        return pd.DataFrame(), pd.DataFrame()
 
     df["cell_ID"] = df["cell_ID"].astype(int)
     df = df.sort_values(["movie", "cell_ID", "frame"]).reset_index(drop=True)
