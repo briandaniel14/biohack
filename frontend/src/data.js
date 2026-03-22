@@ -150,4 +150,10 @@ export async function pollJobStatus(jobId) {
   return resp.json()
 }
 
+export async function fetchActiveJobs() {
+  const resp = await fetch('/api/jobs')
+  if (!resp.ok) return {}
+  return resp.json()
+}
+
 export { FRAME_INTERVAL_MIN, PX_TO_UM }

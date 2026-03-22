@@ -665,6 +665,17 @@ def api_run():
     return jsonify({"job_id": job_id}), 202
 
 
+@app.route("/api/jobs")
+def api_jobs():
+    """Return all currently-running jobs so new devices can discover them."""
+    with _jobs_lock:
+        active = {
+            jid: j for jid, j in _jobs.items()
+            if j.get("status") not in ("complete", "error")
+        }
+    return jsonify(active)
+
+
 @app.route("/api/status/<job_id>")
 def api_status(job_id: str):
     job = _get_job(job_id)
