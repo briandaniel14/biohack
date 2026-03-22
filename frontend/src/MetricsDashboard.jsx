@@ -41,7 +41,7 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
     return frames.map(f => {
       const row = { frame: f }
       rows.filter(r => r.frame === f && r.filament_present === 1 && r.filament_ID != null).forEach(r => {
-        row[`f${r.filament_ID}`] = +(r.filament_mean_length_px * PX_TO_UM).toFixed(2)
+        row[`f${r.filament_ID}`] = +(r.filament_major_axis_length * PX_TO_UM).toFixed(2)
       })
       return row
     })
@@ -50,8 +50,8 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
   const maxLengths = useMemo(() => {
     return filamentIds.map(fid => {
       const vals = rows
-        .filter(r => r.filament_ID === fid && r.filament_mean_length_px != null)
-        .map(r => r.filament_mean_length_px)
+        .filter(r => r.filament_ID === fid && r.filament_major_axis_length != null)
+        .map(r => r.filament_major_axis_length)
       return { fid, max: vals.length > 0 ? +(Math.max(...vals) * PX_TO_UM).toFixed(2) : 0 }
     }).filter(v => v.max > 0)
   }, [rows, filamentIds])

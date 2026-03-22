@@ -54,7 +54,7 @@ export async function loadDatasetData(datasetId) {
       f.last_frame = Math.max(f.last_frame, r.frame)
       f.first_frame = Math.min(f.first_frame, r.frame)
       f.frame_count++
-      if (r.filament_mean_length_px != null) f._lengths.push(r.filament_mean_length_px)
+      if (r.filament_major_axis_length != null) f._lengths.push(r.filament_major_axis_length)
       if (r.filament_area != null) f._areas.push(r.filament_area)
       if (r.filament_eccentricity != null) f._eccs.push(r.filament_eccentricity)
     }

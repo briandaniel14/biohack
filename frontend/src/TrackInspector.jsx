@@ -204,10 +204,7 @@ export default function TrackInspector({
               <span className="text-gray-500">Lifetime:</span>{' '}
               <span className="font-mono">{selectedFilament.frame_count} frames</span>
             </div>
-            <div>
-              <span className="text-gray-500">Appeared:</span>{' '}
-              <span className="font-mono">{frameToTimestamp(selectedFilament.time_of_appearance || selectedFilament.first_frame)}</span>
-            </div>
+
             <div>
               <span className="text-gray-500">Avg length:</span>{' '}
               <span className="font-mono">{selectedFilament.avg_length}µm</span>
@@ -240,7 +237,7 @@ export default function TrackInspector({
                       : 'bg-blue-900/60 hover:bg-blue-800 text-blue-300'
                   }`}
                 >
-                  f{r.frame + 1} — {(Number(r.filament_mean_length_px) * PX_TO_UM).toFixed(2)}µm
+                  f{r.frame + 1} — {(Number(r.filament_major_axis_length) * PX_TO_UM).toFixed(2)}µm
                 </button>
               ))}
             </div>

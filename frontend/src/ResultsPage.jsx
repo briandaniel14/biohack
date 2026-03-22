@@ -308,7 +308,7 @@ export default function ResultsPage({
               src={getFrameUrl(currentDataset.id, frame, viewMode)}
               alt={`Frame ${frame + 1}`}
               className="max-h-full cursor-crosshair"
-              style={{ width: '50%', imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: '1 / 1', objectFit: 'contain' }}
+              style={{ width: '100%', imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: '1 / 1', objectFit: 'contain' }}
               onClick={handleFrameClick}
               onError={() => setImgError(true)}
             />

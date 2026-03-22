@@ -206,7 +206,7 @@ def _run_pipeline_job(
     sys.path.insert(0, str(BASE_DIR))
 
     try:
-        _set_job(job_id, status="running", step="Initializing pipeline...")
+        _set_job(job_id, status="running", dataset_id=dataset_id, step="Initializing pipeline...")
 
         ds_dir = DATA_DIR / dataset_id
         pipeline_output = ds_dir / "pipeline_output"
@@ -248,7 +248,7 @@ def _run_pipeline_job(
 
         # --- Stage 2: Run filament detection on original TIFF (GFP channel) ---
         _set_job(job_id, step="Detecting filaments (Frangi filter)...")
-        from src.biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+        from src.biohack.experiment_config import ExperimentConfig
         from src.biohack.image_detection import process_time_series_image
 
         # Set up a run directory under results/
@@ -275,7 +275,7 @@ def _run_pipeline_job(
         }
         if params:
             base_params.update(params)
-        cfg = experiment_config_from_mapping(base_params)
+        cfg = ExperimentConfig.from_dict(base_params)
 
         # Run Frangi detection — writes masks into run_dir/filament_mask/
         process_time_series_image(
@@ -310,7 +310,7 @@ def _run_legacy_pipeline(
     params: dict[str, Any],
 ) -> None:
     """Fallback: runs old-style detection on pre-split PNGs (no original TIFF available)."""
-    from src.biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+    from src.biohack.experiment_config import ExperimentConfig
     from src.biohack.image_detection import process_directory
 
     ds_dir = DATA_DIR / dataset_id
@@ -326,7 +326,7 @@ def _run_legacy_pipeline(
     }
     if params:
         base_params.update(params)
-    cfg = experiment_config_from_mapping(base_params)
+    cfg = ExperimentConfig.from_dict(base_params)
 
     _set_job(job_id, step="Running detection pipeline (legacy)...")
 
@@ -642,7 +642,7 @@ def api_upload():
             # Cleanup upload
             upload_path.unlink(missing_ok=True)
 
-    _set_job(job_id, status="running", step="Uploading...")
+    _set_job(job_id, status="running", dataset_id=dataset_id, step="Uploading...")
     t = threading.Thread(target=_upload_job, daemon=True)
     t.start()
 
@@ -665,7 +665,7 @@ def api_run():
         return jsonify({"error": f"No raw frames found for dataset '{dataset_id}'"}), 404
 
     job_id = uuid.uuid4().hex
-    _set_job(job_id, status="running", step="Queued...")
+    _set_job(job_id, status="running", dataset_id=dataset_id, step="Queued...")
 
     t = threading.Thread(
         target=_run_pipeline_job,
