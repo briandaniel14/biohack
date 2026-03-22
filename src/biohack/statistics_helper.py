@@ -736,7 +736,7 @@ def build_filament_episodes(
 
             assert current_episode_id is not None
             episode_frames.append(frame)
-            episode_lengths.append(float(row["filament_mean_length_px"]))
+            episode_lengths.append(float(row["filament_major_axis_length"]))
             episode_areas.append(float(row["filament_area"]))
 
             row2 = row.copy()

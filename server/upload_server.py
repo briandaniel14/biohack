@@ -194,7 +194,7 @@ def _run_pipeline_job(
     sys.path.insert(0, str(BASE_DIR))
 
     try:
-        _set_job(job_id, status="running", step="Initializing pipeline...")
+        _set_job(job_id, status="running", dataset_id=dataset_id, step="Initializing pipeline...")
 
         ds_dir = DATA_DIR / dataset_id
         pipeline_output = ds_dir / "pipeline_output"
@@ -630,7 +630,7 @@ def api_upload():
             # Cleanup upload
             upload_path.unlink(missing_ok=True)
 
-    _set_job(job_id, status="running", step="Uploading...")
+    _set_job(job_id, status="running", dataset_id=dataset_id, step="Uploading...")
     t = threading.Thread(target=_upload_job, daemon=True)
     t.start()
 
@@ -653,7 +653,7 @@ def api_run():
         return jsonify({"error": f"No raw frames found for dataset '{dataset_id}'"}), 404
 
     job_id = uuid.uuid4().hex
-    _set_job(job_id, status="running", step="Queued...")
+    _set_job(job_id, status="running", dataset_id=dataset_id, step="Queued...")
 
     t = threading.Thread(
         target=_run_pipeline_job,
