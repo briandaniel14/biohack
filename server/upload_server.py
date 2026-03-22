@@ -798,11 +798,8 @@ def api_download(dataset_id: str):
 # Stripe checkout
 # ---------------------------------------------------------------------------
 
-STRIPE_SECRET_KEY = os.environ.get(
-    "STRIPE_SECRET_KEY",
-    "",
-)
-STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "price_1TDVN2PpTtEsY4oKkuBZlSEB")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")
 
 
 @app.route("/api/checkout", methods=["POST"])
