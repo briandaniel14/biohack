@@ -22,6 +22,7 @@ from src.biohack.statistics_helper import (
     build_filament_episodes,
     clean_cell_mask,
     collect_movie_frames,
+    filter_pillar_tracks_v3_aggressive,
     get_cell_mask_path,
     get_cell_props,
     get_filament_mask_path,
@@ -34,14 +35,14 @@ from src.biohack.statistics_helper import (
     segment_frame_cellpose,
     track_cells_one_movie,
 )
-
-# Must match :mod:`biohack.image_detection` run layout under ``results_directory / <run_id> /``.
-RUN_SUBDIR_BRIGHTFIELD = "brightfield"
-RUN_SUBDIR_GFP = "gfp"
-RUN_SUBDIR_FILAMENT_MASK = "filament_mask"
-RUN_SUBDIR_CELLPOSE_MASK = "cellpose_mask"
-RUN_SUBDIR_STATISTICS = "statistics"
-
+from src.biohack.constants import (
+    RUN_SUBDIR_BRIGHTFIELD,
+    RUN_SUBDIR_GFP,
+    RUN_SUBDIR_FILAMENT_MASK,
+    RUN_SUBDIR_CELLPOSE_MASK,
+    RUN_SUBDIR_STATISTICS,
+    REMOVED_PILLAR_TRACKS_CSV_NAME,
+)
 
 def resolve_run_paths(
     experiment: ExperimentConfig, run_id: str
@@ -57,7 +58,7 @@ def resolve_run_paths(
     """
     results_root = Path(experiment.results_directory)
     run_root = results_root / run_id
-    
+
     brightfield_dir = run_root / RUN_SUBDIR_BRIGHTFIELD
     gfp_dir = run_root / RUN_SUBDIR_GFP
     filament_dir = run_root / RUN_SUBDIR_FILAMENT_MASK
@@ -95,6 +96,10 @@ def run_filament_pipeline(
     :func:`biohack.image_detection.process_directory` (``brightfield/``, ``gfp/``,
     ``filament_mask/``). Only ``experiment.results_directory`` and segmentation /
     tracking fields are used; ``dataset_directory`` is ignored here.
+
+    If ``experiment.remove_pillar_tracks`` is true, static elongated tracks are
+    removed after tracking and before filament assignment; summaries are written
+    to ``statistics/removed_pillar_tracks_v3.csv``.
     """
     exp = experiment
     verbose = exp.verbose
@@ -102,7 +107,7 @@ def run_filament_pipeline(
     bf_p, gfp_p, fil_p, cell_p, out_p = resolve_run_paths(exp, run_id)
 
     print(bf_p, gfp_p, fil_p, cell_p, out_p)
-    
+
     brightfield_dir = str(bf_p)
     gfp_dir = str(gfp_p)
     filament_dir = str(fil_p)
@@ -132,9 +137,7 @@ def run_filament_pipeline(
 
     model_bf: Optional[Any] = None
     if not exp.use_existing_cell_masks:
-        model_bf = models.CellposeModel(
-            gpu=exp.use_gpu, model_type=exp.model_type_bf
-        )
+        model_bf = models.CellposeModel(gpu=exp.use_gpu, model_type=exp.model_type_bf)
 
     all_cell_tracks: List[pd.DataFrame] = []
     movie_frames_store: Dict[str, List[Dict[str, Any]]] = {}
@@ -147,6 +150,7 @@ def run_filament_pipeline(
 
         for frame, path in frame_list:
             img = imread(path)
+            print("processing frame", frame)
 
             out_mask_path = get_cell_mask_path(movie_name, frame, cell_mask_dir)
 
@@ -170,9 +174,7 @@ def run_filament_pipeline(
                         diameter=exp.diameter_bf,
                         channels=exp.channels_bf,
                     )
-                    bf_masks = clean_cell_mask(
-                        bf_masks, min_cell_area=exp.min_area_bf
-                    )
+                    bf_masks = clean_cell_mask(bf_masks, min_cell_area=exp.min_area_bf)
                     clean_mask = bf_masks.copy()
 
                 imwrite(out_mask_path, clean_mask.astype(np.uint16))
@@ -214,6 +216,31 @@ def run_filament_pipeline(
         raise RuntimeError(
             "No cell tracks were produced for any movie; check inputs and segmentation."
         )
+
+    if exp.remove_pillar_tracks:
+        rows_before = len(cell_tracks_df)
+        cell_tracks_df, removed_pillar_summary = filter_pillar_tracks_v3_aggressive(
+            cell_tracks_df,
+            min_track_len=exp.pillar_v3_min_track_frames,
+            max_motion_std=exp.pillar_v3_max_motion_std,
+            min_eccentricity=exp.pillar_v3_min_eccentricity,
+            min_aspect_ratio=exp.pillar_v3_min_aspect_ratio,
+            min_solidity=exp.pillar_v3_min_solidity,
+        )
+        removed_pillar_path = os.path.join(output_dir, REMOVED_PILLAR_TRACKS_CSV_NAME)
+        removed_pillar_summary.to_csv(removed_pillar_path, index=False)
+        rows_after = len(cell_tracks_df)
+        if verbose:
+            print(f"Saved: {removed_pillar_path}")
+            print(
+                f"Pillar removal (v3): {len(removed_pillar_summary)} tracks removed, "
+                f"{rows_before - rows_after} rows dropped, {rows_after} rows remaining"
+            )
+        if cell_tracks_df.empty:
+            raise RuntimeError(
+                "All cell tracks were classified as pillars and removed; "
+                "loosen pillar_v3_* thresholds or disable remove_pillar_tracks."
+            )
 
     if "frame" in cell_tracks_df.columns:
         cell_tracks_df["frame_viewer"] = cell_tracks_df["frame"]
@@ -381,9 +408,7 @@ def run_filament_pipeline(
     )
 
     filaments_csv = os.path.join(output_dir, "filaments_per_frame.csv")
-    merged_csv = os.path.join(
-        output_dir, "cell_tracks_per_frame_with_filaments.csv"
-    )
+    merged_csv = os.path.join(output_dir, "cell_tracks_per_frame_with_filaments.csv")
     filaments_per_frame_df.to_csv(filaments_csv, index=False)
     cell_tracks_with_filaments_df.to_csv(merged_csv, index=False)
     if verbose:

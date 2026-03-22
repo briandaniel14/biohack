@@ -92,6 +92,14 @@ class ExperimentConfig:
     bud_overlap_fraction: float = 0.05
     max_filament_gap: int = 1
 
+    # Post-tracking: remove static elongated tracks (imaging pillars) before filaments.
+    remove_pillar_tracks: bool = False
+    pillar_v3_min_track_frames: int = 3
+    pillar_v3_max_motion_std: float = 3.0
+    pillar_v3_min_eccentricity: float = 0.68
+    pillar_v3_min_aspect_ratio: float = 1.35
+    pillar_v3_min_solidity: float = 0.94
+
     def __post_init__(self) -> None:
         self.diameter_bf = _coerce_optional_float(self.diameter_bf)
         self.diameter_gfp = _coerce_optional_float(self.diameter_gfp)
@@ -99,6 +107,11 @@ class ExperimentConfig:
             self.frangi_sigmas = tuple(
                 float(x) for x in cast(list[Any], self.frangi_sigmas)
             )
+
+    @classmethod
+    def from_dict(cls, mapping: Mapping[str, Any]) -> "ExperimentConfig":
+        """Alias for :func:`experiment_config_from_mapping`."""
+        return experiment_config_from_mapping(mapping)
 
 
 def experiment_config_from_mapping(mapping: Mapping[str, Any]) -> ExperimentConfig:

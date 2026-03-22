@@ -1,11 +1,10 @@
 import glob
 import os
-import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from imageio.v2 import imread as imageio_imread
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
@@ -13,11 +12,7 @@ from skimage.measure import regionprops, regionprops_table, label
 from skimage.morphology import skeletonize
 from tifffile import imread, imwrite
 
-# <movie_name>_frame_<frame_number>_<channel>.tif(f)
-FRAME_FILE_PATTERN = re.compile(
-    r"^(?P<movie>.+)_frame_(?P<frame>\d+)_(?P<channel>BF|GFP)\.tif{1,2}$",
-    re.IGNORECASE,
-)
+from src.biohack.constants import FRAME_FILE_PATTERN
 
 
 def remove_small_objects_from_labelmask(mask: np.ndarray, min_area: int) -> np.ndarray:
@@ -271,6 +266,151 @@ def track_cells_one_movie(
     tracked_df = pd.concat(tracked_rows, ignore_index=True)
     tracked_df["movie"] = movie_name
     return tracked_df
+
+
+def filter_pillar_tracks_v3_aggressive(
+    cell_tracks_df: pd.DataFrame,
+    *,
+    min_track_len: int = 3,
+    max_motion_std: float = 3.0,
+    min_eccentricity: float = 0.68,
+    min_aspect_ratio: float = 1.35,
+    min_solidity: float = 0.94,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Drop cell tracks classified as imaging pillars (v3_aggressive rule).
+
+    Aggregates geometry per ``(movie, cell_ID)``; a track is a pillar when it is
+    long-lived, nearly motionless, elongated, and high-solidity. Returns the
+    filtered per-frame table and a summary of removed tracks (for CSV export).
+    """
+    df = cell_tracks_df.copy()
+    helper_cols = [
+        "is_pillar",
+        "n_frames",
+        "track_motion_std",
+        "median_eccentricity",
+        "median_aspect_ratio",
+        "median_solidity",
+    ]
+    df = df.drop(columns=[c for c in helper_cols if c in df.columns], errors="ignore")
+
+    required_cols = [
+        "movie",
+        "cell_ID",
+        "frame",
+        "centroid_y",
+        "centroid_x",
+        "eccentricity",
+        "major_axis_length",
+        "minor_axis_length",
+        "solidity",
+    ]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Pillar filter requires columns {required_cols}; missing: {missing}"
+        )
+
+    work = df.copy()
+    numeric_cols = [
+        "cell_ID",
+        "frame",
+        "centroid_y",
+        "centroid_x",
+        "eccentricity",
+        "major_axis_length",
+        "minor_axis_length",
+        "solidity",
+    ]
+    for col in numeric_cols:
+        work[col] = pd.to_numeric(work[col], errors="coerce")
+
+    if "area" in work.columns:
+        work["area"] = pd.to_numeric(work["area"], errors="coerce")
+
+    work = work.dropna(subset=["cell_ID"]).copy()
+    work["cell_ID"] = work["cell_ID"].astype(int)
+
+    work["aspect_ratio"] = (
+        work["major_axis_length"] / work["minor_axis_length"].replace(0, np.nan)
+    )
+
+    agg_dict: Dict[str, Any] = {
+        "frame": "nunique",
+        "centroid_y": ["std", "median"],
+        "centroid_x": ["std", "median"],
+        "eccentricity": "median",
+        "solidity": "median",
+        "aspect_ratio": "median",
+    }
+    if "area" in work.columns:
+        agg_dict["area"] = "median"
+
+    track_summary = work.groupby(["movie", "cell_ID"]).agg(agg_dict)
+    track_summary.columns = [
+        "_".join(c).strip("_") if isinstance(c, tuple) else c
+        for c in track_summary.columns
+    ]
+    track_summary = track_summary.reset_index().rename(
+        columns={
+            "frame_nunique": "n_frames",
+            "centroid_y_median": "median_centroid_y",
+            "centroid_x_median": "median_centroid_x",
+            "eccentricity_median": "median_eccentricity",
+            "solidity_median": "median_solidity",
+            "aspect_ratio_median": "median_aspect_ratio",
+            "area_median": "median_area",
+        }
+    )
+
+    track_summary["centroid_y_std"] = track_summary["centroid_y_std"].fillna(0)
+    track_summary["centroid_x_std"] = track_summary["centroid_x_std"].fillna(0)
+    track_summary["track_motion_std"] = np.sqrt(
+        track_summary["centroid_y_std"] ** 2 + track_summary["centroid_x_std"] ** 2
+    )
+
+    track_summary["is_pillar"] = (
+        (track_summary["n_frames"] >= min_track_len)
+        & (track_summary["track_motion_std"] <= max_motion_std)
+        & (track_summary["median_eccentricity"] >= min_eccentricity)
+        & (track_summary["median_aspect_ratio"] >= min_aspect_ratio)
+        & (track_summary["median_solidity"] >= min_solidity)
+    )
+
+    merge_cols = [
+        "movie",
+        "cell_ID",
+        "is_pillar",
+        "n_frames",
+        "track_motion_std",
+        "median_eccentricity",
+        "median_aspect_ratio",
+        "median_solidity",
+    ]
+    df_labeled = df.merge(
+        track_summary[merge_cols],
+        on=["movie", "cell_ID"],
+        how="left",
+    )
+    df_labeled["is_pillar"] = df_labeled["is_pillar"].fillna(False)
+
+    filtered_df = df_labeled.loc[~df_labeled["is_pillar"]].copy()
+    drop_helpers = [
+        "is_pillar",
+        "n_frames",
+        "track_motion_std",
+        "median_eccentricity",
+        "median_aspect_ratio",
+        "median_solidity",
+    ]
+    filtered_df = filtered_df.drop(
+        columns=[c for c in drop_helpers if c in filtered_df.columns],
+        errors="ignore",
+    )
+
+    removed_summary = track_summary.loc[track_summary["is_pillar"]].copy()
+    return filtered_df, removed_summary
 
 
 def get_cell_mask_path(movie_name: str, frame: int, cell_mask_dir: str) -> str:

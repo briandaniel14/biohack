@@ -1,12 +1,12 @@
-import numpy as np
-from PIL import Image
 from pathlib import Path
 import yaml
-
+import numpy as np
 try:
     from IPython.display import display
 except ImportError:
     display = print
+from PIL import Image
+
 
 def read_yaml(path: str | Path) -> dict:
     with open(path, "r") as f:
@@ -15,10 +15,6 @@ def read_yaml(path: str | Path) -> dict:
 def write_yaml(data: dict, path: str | Path) -> None:
     with open(path, "w") as f:
         yaml.dump(data, f)
-
-import numpy as np
-from IPython.display import display
-from PIL import Image
 
 
 def load_tiffs(tiff_paths: list[Path]) -> list[list[np.ndarray]]:
@@ -92,7 +88,6 @@ def matrix_to_image(
         display(img)
 
     return img
-
 
 
 def threshold_for_black_below_percent(

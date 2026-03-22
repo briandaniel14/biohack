@@ -7,7 +7,7 @@ import optuna
 import numpy as np
 from optuna.samplers import TPESampler
 
-from biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+from biohack.experiment_config import ExperimentConfig
 from biohack.image_detection import (
     ensure_grayscale_float,
     robust_normalize,
@@ -25,31 +25,6 @@ from biohack.image_detection import (
 # ============================================================
 # EDITABLE SEARCH SPACES
 # ============================================================
-
-
-# def index_masks(mask_dir: Path, mask_suffix: str) -> dict[str, Path]:
-#     """
-#     Build mapping:
-#         image_stem -> mask_path
-
-#     Example:
-#         ch20_..._frame_10_mask.tif
-#     becomes:
-#         ch20_..._frame_10 -> path
-#     """
-#     mask_map: dict[str, Path] = {}
-
-#     for p in mask_dir.iterdir():
-#         if not p.is_file():
-#             continue
-
-#         if not p.name.endswith(mask_suffix):
-#             continue
-
-#         stem = p.name[: -len(mask_suffix)]
-#         mask_map[stem] = p
-
-#     return mask_map
 
 RAW_SEARCH_SPACE: dict[str, dict[str, Any]] = {
     "gaussian_sigma": {
@@ -96,16 +71,12 @@ CLEANUP_OBJECTIVE_METRIC = "f0_5"
 PRESENCE_OBJECTIVE_METRIC = "f0_5"
 
 # Default fixed config values used unless tuned in a given study
-BASE_CONFIG = experiment_config_from_mapping(read_yaml("config/image_detection.yaml"))
+BASE_CONFIG = ExperimentConfig.from_dict(read_yaml("config/image_detection.yaml"))
 
 # ============================================================
 # DATASET LOADING
 # ============================================================
 
-
-from pathlib import Path
-from typing import Any
-import numpy as np
 
 
 def get_episode_key_from_stem(stem: str) -> str:
