@@ -123,6 +123,27 @@ def _write_dataset_zip(
                     zf.writestr(safe, base64.b64decode(data))
 
 
+def _frame_to_uint8_like_pipeline_raw_panel(frame: np.ndarray) -> np.ndarray:
+    """Match ``plot_pipeline_results`` \"Raw image\" panel (``ensure_grayscale_float`` + default ``imshow`` norm).
+
+    Matplotlib scales float grayscale with vmin/vmax = data min/max; this is not the same as
+    a fixed percentile stretch (e.g. 0.5–99.5).
+    """
+    from skimage import util as skutil
+
+    if frame.ndim == 3:
+        img = skutil.img_as_float(frame)
+        img = img[..., :3].mean(axis=-1)
+    else:
+        img = skutil.img_as_float(frame)
+    lo = float(np.min(img))
+    hi = float(np.max(img))
+    if hi <= lo:
+        return np.zeros(img.shape, dtype=np.uint8)
+    stretched = np.clip((img - lo) / (hi - lo), 0.0, 1.0)
+    return skutil.img_as_ubyte(stretched)
+
+
 def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path, dataset_id: str) -> int:
     """Split a multi-frame TIFF into individual PNG frames for browser display.
 
@@ -163,16 +184,7 @@ def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path, dataset_id: str) -> int:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     for i, frame in enumerate(display_stack):
-        # Normalize to uint8 for browser display
-        if frame.dtype != np.uint8:
-            frame_f = frame.astype(np.float64)
-            lo, hi = np.percentile(frame_f, [0.5, 99.5])
-            if hi - lo < 1e-9:
-                hi = lo + 1.0
-            frame_f = np.clip((frame_f - lo) / (hi - lo), 0, 1)
-            frame_8 = (frame_f * 255).astype(np.uint8)
-        else:
-            frame_8 = frame
+        frame_8 = _frame_to_uint8_like_pipeline_raw_panel(frame)
         skio.imsave(str(out_dir / f"frame_{i:03d}.png"), frame_8, check_contrast=False)
 
     # Preserve original TIFF for pipeline use
