@@ -140,7 +140,7 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setShowPricing(true)}
-            className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium shadow-sm shadow-blue-700/25 transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-gray-600 hover:bg-gray-500 text-white text-sm font-medium shadow-sm shadow-gray-700/25 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -182,7 +182,7 @@ export default function App() {
 
             <button
               onClick={() => { setShowPricing(true); setMenuOpen(false) }}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white transition-colors mt-1"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium bg-gray-600 hover:bg-gray-500 text-white transition-colors mt-1"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
