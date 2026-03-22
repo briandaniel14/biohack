@@ -28,7 +28,7 @@ export default function App() {
 
   // Derived compat state
   const pipelineRunning = Object.values(pipelineJobs).some(j => j.running)
-  const activeJob = Object.values(pipelineJobs).find(j => j.running) || Object.values(pipelineJobs).find(j => j.step)
+  const activeJob = Object.values(pipelineJobs).find(j => j.running)
   const pipelineStep = activeJob?.step || ''
   const pipelineDatasetId = activeJob?.datasetId || null
 
@@ -64,6 +64,7 @@ export default function App() {
             } else if (st.status === 'error') {
               clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
               setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Error: ' + (st.error||'Failed')}; return n })
+              setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
             } else {
               setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], step: st.step || 'Processing...'}; return n })
             }
@@ -92,6 +93,7 @@ export default function App() {
           } else if (st.status === 'error') {
             clearInterval(pollRefs.current[job_id]); delete pollRefs.current[job_id]
             setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], running: false, step: 'Error: '+(st.error||'Failed')}; return n })
+            setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[job_id]; return n }), 5000)
           } else {
             setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], step: st.step || 'Processing...'}; return n })
           }
@@ -127,12 +129,7 @@ export default function App() {
             </button>
           ))}
         </nav>
-        {currentDataset && (
-          <div className="hidden lg:flex items-center gap-2 text-xs text-gray-400 ml-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-            <span className="truncate max-w-[200px]">{currentDataset.name}</span>
-          </div>
-        )}
+
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setShowPricing(true)}
@@ -175,12 +172,7 @@ export default function App() {
                 {p.label}
               </button>
             ))}
-            {currentDataset && (
-              <div className="flex items-center gap-2 text-xs text-gray-400 px-3 py-1.5 border-t border-gray-800 mt-1 pt-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                <span className="truncate">{currentDataset.name}</span>
-              </div>
-            )}
+
             <button
               onClick={() => { setShowPricing(true); setMenuOpen(false) }}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white transition-colors mt-1"

@@ -1,6 +1,5 @@
 import Papa from 'papaparse'
 
-const FRAME_COUNT = 100
 const FRAME_INTERVAL_MIN = 15
 const PX_TO_UM = 0.3
 
@@ -22,6 +21,16 @@ export async function loadDatasetData(datasetId) {
     const text = await resp.text()
     const rows = Papa.parse(text, { header: true, dynamicTyping: true }).data
       .filter(r => r.frame != null)
+
+    // Normalize frames to 0-based (new pipeline uses 1-based frames)
+    const minFrame = rows.length > 0 ? Math.min(...rows.map(r => r.frame)) : 0
+    const frameOffset = minFrame >= 1 ? minFrame : 0
+    if (frameOffset > 0) {
+      for (const r of rows) {
+        r.frame -= frameOffset
+        if (r.time_of_appearance != null) r.time_of_appearance -= frameOffset
+      }
+    }
 
     // Derive filament summary (one entry per filament_ID)
     const filMap = new Map()
@@ -64,8 +73,10 @@ export async function loadDatasetData(datasetId) {
       return f
     }).sort((a, b) => a.filament_ID - b.filament_ID)
 
+    console.log('[loadDatasetData]', datasetId, 'rows:', rows.length, 'filaments:', filamentSummary.length, 'sample:', rows[0])
     return { rows, filamentSummary }
-  } catch {
+  } catch (e) {
+    console.error('loadDatasetData error:', e)
     return { rows: [], filamentSummary: [] }
   }
 }
@@ -135,7 +146,8 @@ export async function deleteResults(datasetId) {
 
 export async function pollJobStatus(jobId) {
   const resp = await fetch(`/api/status/${jobId}`)
+  if (!resp.ok) return { status: 'error', error: 'Job not found (server may have restarted)' }
   return resp.json()
 }
 
-export { FRAME_COUNT, FRAME_INTERVAL_MIN, PX_TO_UM }
+export { FRAME_INTERVAL_MIN, PX_TO_UM }

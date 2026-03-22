@@ -168,7 +168,7 @@ export default function TrackInspector({
                   <td className="px-2 py-1 font-mono text-gray-400">{f.host_cell_ID}</td>
                   <td className="px-2 py-1 font-mono">{f.frame_count}</td>
                   <td className="px-2 py-1 font-mono">{f.avg_length}µm</td>
-                  <td className="px-2 py-1 font-mono">f{Math.round(f.time_of_appearance || f.first_frame)}</td>
+                  <td className="px-2 py-1 font-mono">f{Math.round(f.time_of_appearance || f.first_frame) + 1}</td>
                 </tr>
               )
             })}
@@ -198,7 +198,7 @@ export default function TrackInspector({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs mb-3">
             <div>
               <span className="text-gray-500">Frames:</span>{' '}
-              <span className="font-mono">{selectedFilament.first_frame} → {selectedFilament.last_frame}</span>
+              <span className="font-mono">{selectedFilament.first_frame + 1} → {selectedFilament.last_frame + 1}</span>
             </div>
             <div>
               <span className="text-gray-500">Lifetime:</span>{' '}
@@ -240,7 +240,7 @@ export default function TrackInspector({
                       : 'bg-blue-900/60 hover:bg-blue-800 text-blue-300'
                   }`}
                 >
-                  f{r.frame} — {(Number(r.filament_mean_length_px) * PX_TO_UM).toFixed(2)}µm
+                  f{r.frame + 1} — {(Number(r.filament_mean_length_px) * PX_TO_UM).toFixed(2)}µm
                 </button>
               ))}
             </div>

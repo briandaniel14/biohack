@@ -55,7 +55,7 @@ export default function ResultsPage({
   const chartsRef = useRef(null)
   useEffect(() => { loopRef.current = loop }, [loop])
 
-  const frameCount = summary?.frame_count || 100
+  const frameCount = summary?.frame_count || currentDataset?.frames || 1
 
   useEffect(() => {
     if (!currentDataset) return
@@ -67,15 +67,16 @@ export default function ResultsPage({
     Promise.all([
       loadDatasetData(currentDataset.id),
       loadDatasetSummary(currentDataset.id),
-    ]).then(([{ rows: r, filamentSummary: fs }, summ]) => {
-      setRows(r)
-      setFilamentSummary(fs)
+    ]).then(([data, summ]) => {
+      console.log('[ResultsPage] loaded:', { rows: data.rows?.length, filaments: data.filamentSummary?.length, summary: summ })
+      setRows(data.rows || [])
+      setFilamentSummary(data.filamentSummary || [])
       setSummary(summ)
       setLoading(false)
-    })
+    }).catch(e => { console.error('[ResultsPage] load error:', e); setLoading(false) })
 
     const cache = {}
-    const fc = 100
+    const fc = currentDataset.frames || 1
     for (let i = 0; i < fc; i++) {
       const img = new Image()
       img.src = getFrameUrl(currentDataset.id, i, 'raw')
@@ -305,9 +306,9 @@ export default function ResultsPage({
           ) : (
             <img
               src={getFrameUrl(currentDataset.id, frame, viewMode)}
-              alt={`Frame ${frame}`}
-              className="w-full max-h-full cursor-crosshair"
-              style={{ imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: '1 / 1', objectFit: 'contain' }}
+              alt={`Frame ${frame + 1}`}
+              className="max-h-full cursor-crosshair"
+              style={{ width: '50%', imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: '1 / 1', objectFit: 'contain' }}
               onClick={handleFrameClick}
               onError={() => setImgError(true)}
             />
@@ -319,8 +320,8 @@ export default function ResultsPage({
           {/* Frame info */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span>
-              Frame <span className="font-mono font-semibold text-white">{frame}</span>
-              <span className="text-gray-500"> / {frameCount - 1}</span>
+              Frame <span className="font-mono font-semibold text-white">{frame + 1}</span>
+              <span className="text-gray-500"> / {frameCount}</span>
               <span className="text-gray-500 ml-2">— {frameToTimestamp(frame)}</span>
             </span>
             <div className="flex items-center gap-1">
@@ -406,7 +407,7 @@ export default function ResultsPage({
             onFilterChange={setFilteredFilamentIds}
           />
         </div>
-        <div className="flex-1 min-h-[400px] lg:min-h-0" ref={chartsRef}>
+        <div className="flex-1 min-h-[600px] lg:min-h-0" ref={chartsRef}>
           <MetricsDashboard
             rows={rows}
             filamentSummary={filamentSummary}

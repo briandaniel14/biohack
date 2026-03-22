@@ -405,11 +405,17 @@ def run_filament_pipeline(
 
     cell_lineage_df = build_cell_lineage_table(cell_tracks_df)
 
-    filament_episodes_with_lineage_df = filament_episodes_df.merge(
-        cell_lineage_df,
-        on=["movie", "cell_ID"],
-        how="left",
-    )
+    if len(filament_episodes_df) > 0:
+        filament_episodes_with_lineage_df = filament_episodes_df.merge(
+            cell_lineage_df,
+            on=["movie", "cell_ID"],
+            how="left",
+        )
+    else:
+        filament_episodes_with_lineage_df = filament_episodes_df.copy()
+        for col in ["mother_cell_ID"]:
+            if col not in filament_episodes_with_lineage_df.columns:
+                filament_episodes_with_lineage_df[col] = pd.Series(dtype="object")
 
     filament_episodes_with_lineage_df["time_of_appearance_viewer"] = (
         filament_episodes_with_lineage_df["time_of_appearance"]

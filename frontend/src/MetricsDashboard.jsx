@@ -98,9 +98,9 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={lengthData} onClick={handleChartClick} style={{cursor:'pointer'}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} />
+            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} tickFormatter={v => v + 1} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} label={{ value: 'µm', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#9ca3af' } }} />
-            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
+            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v + 1}`} />
             {filamentIds.map(fid => (
               <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
             ))}
@@ -116,9 +116,9 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={countData} barGap={0} onClick={handleChartClick} style={{cursor:'pointer'}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} />
+            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} tickFormatter={v => v + 1} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} allowDecimals={false} />
-            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
+            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v + 1}`} />
             <Bar dataKey="filaments" fill="#60a5fa" name="Filaments" />
           </BarChart>
         </ResponsiveContainer>
@@ -129,9 +129,9 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={areaData} onClick={handleChartClick} style={{cursor:'pointer'}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} />
+            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} tickFormatter={v => v + 1} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} label={{ value: 'µm²', angle: -90, position: 'insideLeft', style: { fontSize: 9, fill: '#9ca3af' } }} />
-            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
+            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v + 1}`} />
             {filamentIds.map(fid => (
               <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
             ))}
@@ -144,9 +144,9 @@ export default function MetricsDashboard({ rows, filamentSummary, onJumpToFrame,
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={eccData} onClick={handleChartClick} style={{cursor:'pointer'}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} />
+            <XAxis dataKey="frame" tick={{ fontSize: 9, fill: '#9ca3af' }} ticks={xTicks} tickFormatter={v => v + 1} />
             <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} domain={[0, 1]} />
-            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v}`} />
+            <Tooltip contentStyle={TT} labelFormatter={v => `Frame ${v + 1}`} />
             {filamentIds.map(fid => (
               <Line key={fid} type="monotone" dataKey={`f${fid}`} stroke={getTrackColor(fid)} dot={false} strokeWidth={1.5} connectNulls={false} name={`Filament ${Math.round(fid)}`} />
             ))}

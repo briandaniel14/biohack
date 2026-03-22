@@ -30,6 +30,7 @@ from werkzeug.utils import secure_filename
 BASE_DIR = Path(__file__).resolve().parent.parent          # biohack/
 DATA_DIR = BASE_DIR / "server_data"                        # served as /data/
 UPLOAD_TMP = BASE_DIR / "server_uploads"
+ORIG_TIFFS = BASE_DIR / "server_originals"                 # original uploaded TIFFs
 SAMPLE_CSV = BASE_DIR / "test" / "cell_tracks_per_frame_with_filaments_and_ids.csv"
 ALLOWED_EXTENSIONS = {".tif", ".tiff"}
 
@@ -43,6 +44,18 @@ _jobs_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_FRAME_INTERVAL_MIN = 15
+
+def _format_timespan(n_frames: int) -> str:
+    total_min = (n_frames - 1) * _FRAME_INTERVAL_MIN
+    h, m = divmod(total_min, 60)
+    if h and m:
+        return f"{h}h {m}m"
+    if h:
+        return f"{h}h"
+    return f"{m}m"
+
 
 def _datasets_json_path() -> Path:
     return DATA_DIR / "datasets.json"
@@ -110,17 +123,46 @@ def _write_dataset_zip(
                     zf.writestr(safe, base64.b64decode(data))
 
 
-def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path) -> int:
-    """Split a multi-frame TIFF into individual PNG frames. Returns frame count."""
+def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path, dataset_id: str) -> int:
+    """Split a multi-frame TIFF into individual PNG frames for browser display.
+
+    Handles both single-channel and 2-channel (BF+GFP) stacks.
+    For 2-channel data, displays channel 1 (GFP).
+    Also saves the original TIFF for later pipeline use.
+    Returns frame count.
+    """
+    import shutil
     import tifffile
-    from skimage import exposure, io as skio
+    from skimage import io as skio
 
     stack = tifffile.imread(str(tiff_path))
-    if stack.ndim == 2:
-        stack = stack[np.newaxis, ...]  # single frame
+
+    # Detect and handle multi-channel stacks → extract GFP (channel 1)
+    if stack.ndim == 4 and stack.shape[1] == 2:
+        # (T, C, Y, X) — take GFP channel
+        display_stack = stack[:, 1, :, :]
+    elif stack.ndim == 4 and stack.shape[-1] == 2:
+        # (T, Y, X, C)
+        display_stack = stack[:, :, :, 1]
+    elif stack.ndim == 3:
+        z = stack.shape[0]
+        if z % 2 == 0 and z >= 4:
+            # Likely interleaved 2-channel: reshape and take GFP
+            t = z // 2
+            reshaped = stack.reshape(t, 2, stack.shape[1], stack.shape[2])
+            display_stack = reshaped[:, 1, :, :]
+        else:
+            display_stack = stack
+    elif stack.ndim == 2:
+        display_stack = stack[np.newaxis, ...]
+    else:
+        display_stack = stack
+
+    if display_stack.ndim == 2:
+        display_stack = display_stack[np.newaxis, ...]
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    for i, frame in enumerate(stack):
+    for i, frame in enumerate(display_stack):
         # Normalize to uint8 for browser display
         if frame.dtype != np.uint8:
             frame_f = frame.astype(np.float64)
@@ -132,7 +174,13 @@ def _split_tiff_to_pngs(tiff_path: Path, out_dir: Path) -> int:
         else:
             frame_8 = frame
         skio.imsave(str(out_dir / f"frame_{i:03d}.png"), frame_8, check_contrast=False)
-    return len(stack)
+
+    # Preserve original TIFF for pipeline use
+    orig_dir = ORIG_TIFFS / dataset_id
+    orig_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(tiff_path), str(orig_dir / tiff_path.name))
+
+    return len(display_stack)
 
 
 def _run_pipeline_job(
@@ -141,41 +189,147 @@ def _run_pipeline_job(
     raw_dir: Path,
     params: dict[str, Any],
 ) -> None:
-    """Background worker: runs the pipeline, exports results, updates job status."""
+    """Background worker: runs the full pipeline (detection + statistics), updates job status."""
     import sys
     sys.path.insert(0, str(BASE_DIR))
 
     try:
-        from src.biohack.image_detection import FilamentConfig, filament_config_from_mapping, process_directory
-
         _set_job(job_id, status="running", step="Initializing pipeline...")
 
         ds_dir = DATA_DIR / dataset_id
         pipeline_output = ds_dir / "pipeline_output"
         pipeline_output.mkdir(parents=True, exist_ok=True)
 
-        # Build config from params
-        cfg = filament_config_from_mapping(params) if params else FilamentConfig()
+        # --- Locate original TIFF ---
+        orig_dir = ORIG_TIFFS / dataset_id
+        orig_tiff = None
+        if orig_dir.is_dir():
+            tiffs = sorted(orig_dir.glob("*.tif")) + sorted(orig_dir.glob("*.tiff"))
+            if tiffs:
+                orig_tiff = tiffs[0]
 
-        _set_job(job_id, step="Running detection pipeline...")
+        if orig_tiff is None:
+            # Fallback: run old-style pipeline on PNGs
+            _run_legacy_pipeline(job_id, dataset_id, raw_dir, params)
+            return
 
-        batch = process_directory(
-            input_dir=raw_dir,
-            output_dir=pipeline_output,
-            config=cfg,
-            max_workers=min(4, os.cpu_count() or 1),
+        # --- Stage 1: Split TIFF into BF + GFP per-frame TIFFs ---
+        _set_job(job_id, step="Splitting channels (BF + GFP)...")
+        from src.biohack.split_tiffs import split_two_channel_time_stacks
+
+        separated_dir = ds_dir / "separated_frames"
+        separated_dir.mkdir(parents=True, exist_ok=True)
+
+        split_two_channel_time_stacks(
+            input_file=str(orig_tiff),
+            output_dir=str(separated_dir),
             verbose=False,
         )
 
-        _set_job(job_id, step="Exporting results for frontend...")
+        # Find the UUID subdir created by split_two_channel_time_stacks
+        subdirs = [d for d in separated_dir.iterdir() if d.is_dir() and (d / "brightfield").is_dir()]
+        if not subdirs:
+            raise RuntimeError("split_two_channel_time_stacks did not produce expected output")
+        split_root = subdirs[0]
+        bf_dir = split_root / "brightfield"
+        gfp_dir = split_root / "gfp"
 
-        run_dir = batch["run_dir"]
-        _export_run_for_frontend(dataset_id, run_dir, batch)
+        # --- Stage 2: Run filament detection on original TIFF (GFP channel) ---
+        _set_job(job_id, step="Detecting filaments (Frangi filter)...")
+        from src.biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+        from src.biohack.image_detection import process_time_series_image
+
+        # Set up a run directory under results/
+        run_id = str(uuid.uuid4())
+        results_base = ds_dir / "results"
+        results_base.mkdir(parents=True, exist_ok=True)
+        run_dir = results_base / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy split BF+GFP into run dir layout expected by run_filament_pipeline
+        import shutil as _shutil
+        dst_bf = run_dir / "brightfield"
+        dst_gfp = run_dir / "gfp"
+        _shutil.copytree(str(bf_dir), str(dst_bf))
+        _shutil.copytree(str(gfp_dir), str(dst_gfp))
+
+        # Build config
+        base_params = {
+            "run_name": dataset_id,
+            "dataset_directory": str(split_root),
+            "results_directory": str(results_base),
+            "use_gpu": False,
+            "verbose": False,
+        }
+        if params:
+            base_params.update(params)
+        cfg = experiment_config_from_mapping(base_params)
+
+        # Run Frangi detection — writes masks into run_dir/filament_mask/
+        process_time_series_image(
+            image_path=str(orig_tiff),
+            output_dir=str(run_dir),
+            config=cfg,
+            channel=1,  # GFP
+        )
+
+        # --- Stage 3: Run cell tracking + filament statistics ---
+        _set_job(job_id, step="Running Cellpose segmentation & tracking...")
+        from src.biohack.filament_statistics import run_filament_pipeline
+
+        pipeline_result = run_filament_pipeline(cfg, run_id, verbose=False)
+
+        # --- Export for frontend ---
+        _set_job(job_id, step="Exporting results for frontend...")
+        _export_stats_for_frontend(dataset_id, ds_dir, run_dir, pipeline_result)
 
         _set_job(job_id, status="complete", dataset_id=dataset_id, step="Done")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         _set_job(job_id, status="error", error=str(e))
+
+
+def _run_legacy_pipeline(
+    job_id: str,
+    dataset_id: str,
+    raw_dir: Path,
+    params: dict[str, Any],
+) -> None:
+    """Fallback: runs old-style detection on pre-split PNGs (no original TIFF available)."""
+    from src.biohack.experiment_config import ExperimentConfig, experiment_config_from_mapping
+    from src.biohack.image_detection import process_directory
+
+    ds_dir = DATA_DIR / dataset_id
+    pipeline_output = ds_dir / "pipeline_output"
+    pipeline_output.mkdir(parents=True, exist_ok=True)
+
+    base_params = {
+        "run_name": dataset_id,
+        "dataset_directory": str(raw_dir),
+        "results_directory": str(pipeline_output),
+        "use_gpu": False,
+        "verbose": False,
+    }
+    if params:
+        base_params.update(params)
+    cfg = experiment_config_from_mapping(base_params)
+
+    _set_job(job_id, step="Running detection pipeline (legacy)...")
+
+    batch = process_directory(
+        cfg,
+        max_workers=min(4, os.cpu_count() or 1),
+        verbose=False,
+    )
+
+    _set_job(job_id, step="Exporting results for frontend...")
+
+    run_dir = batch["run_dir"]
+    _export_run_for_frontend(dataset_id, run_dir, batch)
+
+    _set_job(job_id, status="complete", dataset_id=dataset_id, step="Done")
 
 
 def _export_run_for_frontend(
@@ -292,9 +446,122 @@ def _export_run_for_frontend(
             "id": dataset_id,
             "name": dataset_id.replace("_", " ").title(),
             "frames": len(sorted_names),
-            "timeSpan": f"{len(sorted_names)} frames",
+            "timeSpan": _format_timespan(len(sorted_names)),
         })
         _write_datasets(datasets)
+
+
+def _export_stats_for_frontend(
+    dataset_id: str,
+    ds_dir: Path,
+    filament_output: Path,
+    pipeline_result: Any,
+) -> None:
+    """
+    Export the new-pipeline results into the frontend-expected structure.
+
+    Uses filament detection masks for mask overlay PNGs, and copies
+    the cell_tracks_per_frame_with_filaments_and_ids.csv as cell_tracks.csv.
+    """
+    import shutil as _shutil
+    from datetime import datetime, timezone
+    from skimage import io as skio
+
+    raw_out = ds_dir / "raw"
+    mask_out = ds_dir / "masks"
+    diag_out = ds_dir / "diagnostics"
+    mask_out.mkdir(parents=True, exist_ok=True)
+    diag_out.mkdir(parents=True, exist_ok=True)
+
+    # Count frames from raw PNGs
+    raw_frames = sorted(raw_out.glob("frame_*.png"))
+    n_frames = len(raw_frames)
+
+    # Build mask overlay PNGs from filament detection output
+    masks_src = filament_output / "filament_mask"
+    diag_src = filament_output / "diagnostics"
+
+    if masks_src.is_dir():
+        mask_files = sorted(masks_src.glob("*_mask_*"))
+        for mf in mask_files:
+            # Parse frame index from filename: {stem}_mask_{t}_{channel}.png
+            parts = mf.stem.rsplit("_mask_", 1)
+            if len(parts) < 2:
+                continue
+            idx_parts = parts[1].split("_")
+            try:
+                frame_idx = int(idx_parts[0])
+            except ValueError:
+                continue
+
+            raw_file = raw_out / f"frame_{frame_idx:03d}.png"
+            out_file = mask_out / f"frame_{frame_idx:03d}.png"
+
+            if raw_file.exists():
+                raw_img = skio.imread(str(raw_file))
+                mask_img = skio.imread(str(mf))
+                # Build composite: raw base + red overlay where mask > 0
+                if raw_img.ndim == 2:
+                    rgba = np.stack([raw_img, raw_img, raw_img,
+                                     np.full_like(raw_img, 255)], axis=-1)
+                else:
+                    rgba = np.dstack([raw_img[:, :, :3],
+                                      np.full(raw_img.shape[:2], 255, dtype=np.uint8)])
+                mask_bool = mask_img > 0
+                if mask_bool.ndim > 2:
+                    mask_bool = mask_bool.any(axis=-1)
+                rgba[mask_bool, 0] = np.clip(
+                    rgba[mask_bool, 0].astype(np.int16) + 140, 0, 255).astype(np.uint8)
+                rgba[mask_bool, 1] = (rgba[mask_bool, 1] * 0.3).astype(np.uint8)
+                rgba[mask_bool, 2] = (rgba[mask_bool, 2] * 0.3).astype(np.uint8)
+                rgba[mask_bool, 3] = 255
+                skio.imsave(str(out_file), rgba, check_contrast=False)
+            else:
+                _shutil.copy2(str(mf), str(out_file))
+
+    # Copy diagnostic images
+    if diag_src.is_dir():
+        diag_files = sorted(diag_src.glob("*_pipeline_*"))
+        for df in diag_files:
+            parts = df.stem.rsplit("_pipeline_", 1)
+            if len(parts) < 2:
+                continue
+            idx_parts = parts[1].split("_")
+            try:
+                frame_idx = int(idx_parts[0])
+            except ValueError:
+                continue
+            _shutil.copy2(str(df), str(diag_out / f"frame_{frame_idx:03d}.png"))
+
+    # Copy statistics CSVs to dataset root
+    stats_dir = filament_output / "statistics"
+    if stats_dir.is_dir():
+        for csv_file in stats_dir.glob("*.csv"):
+            _shutil.copy2(str(csv_file), str(ds_dir / csv_file.name))
+
+    # Copy the main tracking CSV as cell_tracks.csv (what the frontend loads)
+    main_csv = ds_dir / "cell_tracks_per_frame_with_filaments_and_ids.csv"
+    cell_tracks_dst = ds_dir / "cell_tracks.csv"
+    if main_csv.exists():
+        _shutil.copy2(str(main_csv), str(cell_tracks_dst))
+
+    # Build summary JSON
+    df = pipeline_result.cell_tracks_with_filaments_and_ids_df
+    frames_with_filament = 0
+    if "filament_present" in df.columns:
+        frames_with_filament = int(df.groupby("frame")["filament_present"].max().sum())
+
+    summary = {
+        "dataset_id": dataset_id,
+        "run_uid": "",
+        "run_name": "",
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "frame_count": n_frames,
+        "frames_with_filament": frames_with_filament,
+        "frame_stats": [],
+    }
+    with open(ds_dir / "summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -323,9 +590,16 @@ def api_upload():
 
     # Create dataset
     dataset_id = Path(fname).stem.lower().replace(" ", "_")
-    # Avoid collisions
-    existing = {d["id"] for d in _read_datasets()}
-    if dataset_id in existing:
+    # Reject duplicate by name
+    display_name = Path(fname).stem.replace("_", " ").title()
+    existing_datasets = _read_datasets()
+    existing_names = {d.get("name", "").lower() for d in existing_datasets}
+    if display_name.lower() in existing_names:
+        upload_path.unlink(missing_ok=True)
+        return jsonify({"error": f"A dataset named \"{display_name}\" already exists"}), 409
+    # Avoid id collisions
+    existing_ids = {d["id"] for d in existing_datasets}
+    if dataset_id in existing_ids:
         dataset_id = f"{dataset_id}_{uuid.uuid4().hex[:6]}"
 
     ds_dir = DATA_DIR / dataset_id
@@ -336,7 +610,7 @@ def api_upload():
     def _upload_job():
         try:
             _set_job(job_id, status="running", step="Splitting TIFF into frames...")
-            n_frames = _split_tiff_to_pngs(upload_path, raw_dir)
+            n_frames = _split_tiff_to_pngs(upload_path, raw_dir, dataset_id)
 
             # Register dataset
             datasets = _read_datasets()
@@ -344,7 +618,7 @@ def api_upload():
                 "id": dataset_id,
                 "name": Path(fname).stem.replace("_", " ").title(),
                 "frames": n_frames,
-                "timeSpan": f"{n_frames} frames",
+                "timeSpan": _format_timespan(n_frames),
             })
             _write_datasets(datasets)
 
@@ -428,6 +702,11 @@ def api_delete_dataset(dataset_id: str):
     if ds_dir.is_dir():
         shutil.rmtree(ds_dir)
 
+    # Also clean up the stored original TIFF
+    orig_dir = ORIG_TIFFS / dataset_id
+    if orig_dir.is_dir():
+        shutil.rmtree(orig_dir)
+
     datasets = _read_datasets()
     datasets = [d for d in datasets if d["id"] != dataset_id]
     _write_datasets(datasets)
@@ -458,7 +737,8 @@ def api_delete_results(dataset_id: str):
     import shutil
 
     ds_dir = DATA_DIR / dataset_id
-    for sub in ("masks", "diagnostics", "pipeline_output"):
+    for sub in ("masks", "diagnostics", "pipeline_output", "separated_frames",
+                "filament_detection", "results", "cellpose_masks"):
         p = ds_dir / sub
         if p.is_dir():
             shutil.rmtree(p)

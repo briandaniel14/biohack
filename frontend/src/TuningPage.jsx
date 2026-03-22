@@ -35,7 +35,7 @@ export default function TuningPage({
   const paramsRef = useRef({})
   useEffect(() => { loopRef.current = loop }, [loop])
 
-  const frameCount = summary?.frame_count || 100
+  const frameCount = summary?.frame_count || currentDataset?.frames || 1
 
   useEffect(() => {
     if (!currentDataset) return
@@ -55,7 +55,7 @@ export default function TuningPage({
 
     // Preload raw frames only (masks/diagnostics may not exist yet)
     const cache = {}
-    const fc = 100
+    const fc = currentDataset.frames || 1
     for (let i = 0; i < fc; i++) {
       const img = new Image()
       img.src = getFrameUrl(currentDataset.id, i, 'raw')
@@ -107,7 +107,7 @@ export default function TuningPage({
 
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+    <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-auto lg:overflow-hidden">
       {/* LEFT: Image + Controls */}
       <div className="w-full lg:w-[42%] flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-gray-800">
         {/* Image */}
@@ -122,9 +122,9 @@ export default function TuningPage({
           ) : (
             <img
               src={getFrameUrl(currentDataset.id, frame, viewMode)}
-              alt={`Frame ${frame}`}
-              className="w-full max-h-full cursor-crosshair"
-              style={{ imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: viewMode === 'diagnostic' ? 'auto' : '1 / 1' }}
+              alt={`Frame ${frame + 1}`}
+              className="max-h-full cursor-crosshair"
+              style={{ width: '50%', imageRendering: viewMode === 'diagnostic' ? 'auto' : 'pixelated', aspectRatio: viewMode === 'diagnostic' ? 'auto' : '1 / 1', objectFit: 'contain' }}
               onError={() => setImgError(true)}
             />
           )}
@@ -135,8 +135,8 @@ export default function TuningPage({
           {/* Frame info */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span>
-              Frame <span className="font-mono font-semibold text-white">{frame}</span>
-              <span className="text-gray-500"> / {frameCount - 1}</span>
+              Frame <span className="font-mono font-semibold text-white">{frame + 1}</span>
+              <span className="text-gray-500"> / {frameCount}</span>
               <span className="text-gray-500 ml-2">— {frameToTimestamp(frame)}</span>
             </span>
             <div className="flex items-center gap-1">
@@ -207,7 +207,7 @@ export default function TuningPage({
       </div>
 
       {/* RIGHT: Hyperparameters + Actions */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-[500px] lg:min-h-0">
         <div className="flex-1 min-h-0 overflow-hidden">
           <HyperparamPanel onChange={vals => { paramsRef.current = vals }} />
         </div>
@@ -257,7 +257,8 @@ export default function TuningPage({
               }
               onNavigateResults()
             }}
-            className="w-full py-2.5 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg border border-gray-700 bg-gray-800 hover:bg-gray-700 text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={pipelineRunning}
           >
             View Results
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

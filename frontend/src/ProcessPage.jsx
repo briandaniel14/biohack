@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { getFrameUrl, FRAME_COUNT, uploadTifFile, pollJobStatus, loadDatasets } from './data.js'
+import { getFrameUrl, uploadTifFile, pollJobStatus, loadDatasets } from './data.js'
 import HyperparamPanel from './HyperparamPanel.jsx'
 
 export default function ProcessPage({
@@ -107,7 +107,7 @@ export default function ProcessPage({
               <div className="text-sm text-gray-400">
                 Drop .tif/.tiff here or <span className="text-blue-400 underline">click to upload</span>
               </div>
-              <div className="text-xs text-gray-600 mt-1">100-frame grayscale TIFF stack</div>
+              <div className="text-xs text-gray-600 mt-1">Multi-frame TIFF stack</div>
             </div>
           )}
         </div>
@@ -135,7 +135,7 @@ export default function ProcessPage({
         {currentDataset && (
           <div className="flex-1 min-h-0 flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">Preview — Frame {previewFrame}</span>
+              <span className="text-xs text-gray-400">Preview — Frame {previewFrame + 1}</span>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -149,7 +149,7 @@ export default function ProcessPage({
             <div className="relative bg-black flex-1 min-h-0 flex items-center justify-center">
               <img
                 src={getFrameUrl(currentDataset.id, previewFrame, showAnnotated)}
-                alt={`Frame ${previewFrame}`}
+                alt={`Frame ${previewFrame + 1}`}
                 className="w-full max-h-full"
                 style={{ imageRendering: 'pixelated', aspectRatio: '1 / 1' }}
               />
@@ -157,7 +157,7 @@ export default function ProcessPage({
             <input
               type="range"
               min={0}
-              max={FRAME_COUNT - 1}
+              max={(currentDataset?.frames || 1) - 1}
               value={previewFrame}
               onChange={e => setPreviewFrame(parseInt(e.target.value))}
               className="w-full accent-blue-500"
