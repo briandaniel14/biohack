@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field, fields
 from typing import Any, List, Mapping, Optional, cast
 

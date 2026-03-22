@@ -1,7 +1,5 @@
 """Cell segmentation, tracking, filament measurement, and episode summaries."""
 
-from __future__ import annotations
-
 import os
 import re
 from dataclasses import dataclass
