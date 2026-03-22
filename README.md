@@ -2,13 +2,13 @@
 
 ## Description of code:
 
-CellPose was used to detect cells. Visual processing 
+CellPose was used to create cell masks. Visual processing was used to mask filaments. 
 
 
 
 ## Use of LLMs:
 
-Claude was used to generate code for website UI. ChatGTP assisted with CellPose coding.
+Claude was extensively used to generate code for website UI. ChatGTP assisted with CellPose coding. 
 
 ## Setup: 
 
