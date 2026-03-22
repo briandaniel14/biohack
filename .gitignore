@@ -13,6 +13,7 @@ dist/
 .venv/
 .DS_Store
 temp/**
+quick_test_res/**
 data/**
 data/ch20_URA7_URA8_001-crop1/frames/
 data/ch20_URA7_URA8_001-crop2/frames/
