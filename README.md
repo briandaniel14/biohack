@@ -12,7 +12,7 @@ Filaments still linked if not detected in only one frame.
 
 ## Use of LLMs:
 
-Claude was extensively used to generate code for website UI. ChatGTP assisted with CellPose coding. 
+Claude was extensively used to generate code for website UI. ChatGPT assisted with CellPose coding. 
 
 ## Setup: 
 
