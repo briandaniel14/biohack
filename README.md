@@ -2,7 +2,11 @@
 
 ## Description of code:
 
-CellPose was used to create cell masks. Visual processing was used to mask filaments. 
+CellPose was used to create cell masks. Visual processing was used to mask filaments.
+
+Hyperparameters adjustable on website, through either sliders on typed input.
+
+Filaments still linked if not detected in only one frame.
 
 
 
