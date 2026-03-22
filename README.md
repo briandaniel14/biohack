@@ -2,6 +2,9 @@
 
 A web-based microscopy analysis tool available at www.filament-tracker.co.uk for detecting and tracking filamentous structures in time-lapse fluorescence microscopy images. The system provides a pipeline for segmentation, classification, and visualization of filaments, with a modern React frontend and Python backend.
 
+## Use of LLMs
+Claude code was used extensively for the creation of the frontend. ChatGPT and Claude were generally used to assist coding.
+
 ## Features
 
 Upload multi-channel TIF stacks via a browser UI
