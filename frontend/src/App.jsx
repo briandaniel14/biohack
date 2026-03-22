@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { loadDatasets, loadDatasetSummary, runPipeline, pollJobStatus } from './data.js'
+import { loadDatasets, loadDatasetSummary, runPipeline, pollJobStatus, fetchActiveJobs } from './data.js'
 import UploadPage from './UploadPage.jsx'
 import TuningPage from './TuningPage.jsx'
 import ResultsPage from './ResultsPage.jsx'
@@ -49,31 +49,55 @@ export default function App() {
     }).catch(() => {})
   }, [])
 
-  // Resume polling on mount (survives refresh), cleanup on unmount
+  // Discover running jobs from server (cross-device visibility)
+  useEffect(() => {
+    fetchActiveJobs().then(serverJobs => {
+      if (!serverJobs || Object.keys(serverJobs).length === 0) return
+      setPipelineJobs(prev => {
+        const merged = { ...prev }
+        for (const [jid, j] of Object.entries(serverJobs)) {
+          if (!merged[jid]) {
+            merged[jid] = { datasetId: j.dataset_id || null, running: true, step: j.step || 'Processing...' }
+          }
+        }
+        return merged
+      })
+    }).catch(() => {})
+  }, [])
+
+  // Start polling for any running jobs not yet polled
+  const startPolling = useCallback((jid) => {
+    if (pollRefs.current[jid]) return
+    pollRefs.current[jid] = setInterval(async () => {
+      try {
+        const st = await pollJobStatus(jid)
+        if (st.status === 'complete') {
+          clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
+          setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Done!'}; return n })
+          loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
+          setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
+        } else if (st.status === 'error') {
+          clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
+          setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Error: ' + (st.error||'Failed')}; return n })
+          setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
+        } else {
+          setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], step: st.step || 'Processing...'}; return n })
+        }
+      } catch {}
+    }, 2000)
+  }, [])
+
+  // Resume polling on mount and when new jobs appear, cleanup on unmount
   useEffect(() => {
     Object.entries(pipelineJobs).forEach(([jid, job]) => {
-      if (job.running && !pollRefs.current[jid]) {
-        pollRefs.current[jid] = setInterval(async () => {
-          try {
-            const st = await pollJobStatus(jid)
-            if (st.status === 'complete') {
-              clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
-              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Done!'}; return n })
-              loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
-              setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
-            } else if (st.status === 'error') {
-              clearInterval(pollRefs.current[jid]); delete pollRefs.current[jid]
-              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], running: false, step: 'Error: ' + (st.error||'Failed')}; return n })
-              setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[jid]; return n }), 5000)
-            } else {
-              setPipelineJobs(p => { const n = {...p}; n[jid] = {...n[jid], step: st.step || 'Processing...'}; return n })
-            }
-          } catch {}
-        }, 2000)
-      }
+      if (job.running) startPolling(jid)
     })
+  }, [pipelineJobs, startPolling])
+
+  // Cleanup all poll intervals on unmount
+  useEffect(() => {
     return () => { Object.values(pollRefs.current).forEach(id => clearInterval(id)) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleRunPipeline = useCallback(async (datasetId, params) => {
     const alreadyRunning = Object.values(pipelineJobs).some(j => j.running && j.datasetId === datasetId)
@@ -82,23 +106,6 @@ export default function App() {
       const { job_id, error } = await runPipeline(datasetId, params)
       if (error) { setPipelineJobs(p => ({...p, ['e'+Date.now()]: {datasetId, running: false, step: 'Error: '+error}})); return }
       setPipelineJobs(p => ({...p, [job_id]: {datasetId, running: true, step: 'Starting...'}}))
-      pollRefs.current[job_id] = setInterval(async () => {
-        try {
-          const st = await pollJobStatus(job_id)
-          if (st.status === 'complete') {
-            clearInterval(pollRefs.current[job_id]); delete pollRefs.current[job_id]
-            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], running: false, step: 'Done!'}; return n })
-            loadDatasets().then(ds => setDatasets(ds)).catch(() => {})
-            setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[job_id]; return n }), 5000)
-          } else if (st.status === 'error') {
-            clearInterval(pollRefs.current[job_id]); delete pollRefs.current[job_id]
-            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], running: false, step: 'Error: '+(st.error||'Failed')}; return n })
-            setTimeout(() => setPipelineJobs(p => { const n = {...p}; delete n[job_id]; return n }), 5000)
-          } else {
-            setPipelineJobs(p => { const n = {...p}; n[job_id] = {...n[job_id], step: st.step || 'Processing...'}; return n })
-          }
-        } catch {}
-      }, 2000)
     } catch (e) {
       setPipelineJobs(p => ({...p, ['e'+Date.now()]: {datasetId, running: false, step: 'Error: '+e.message}}))
     }

@@ -2,36 +2,37 @@
 
 ## 1. Overview
 
-A web-based microscopy analysis tool that detects and tracks filamentous structures in time-lapse fluorescence microscopy images. Users upload grayscale TIF stacks via a browser UI, the server runs an 8-stage detection pipeline, and results are visualised in a React frontend with playback, per-track inspection, and metrics dashboards.
+A web-based microscopy analysis tool that detects and tracks filamentous structures in time-lapse fluorescence microscopy images. Users upload multi-channel TIF stacks via a browser UI, the server splits channels, runs Cellpose segmentation + Frangi-based filament detection + a statistics pipeline, and results are visualised in a React frontend with playback, per-track inspection, and metrics dashboards.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         User's Browser                              │
 │                                                                     │
-│  ┌─────────────────────┐       ┌──────────────────────────────────┐ │
-│  │     Process Page     │       │          Results Page            │ │
-│  │  Upload TIF          │       │  Frame playback + controls      │ │
-│  │  Adjust hyperparams  │       │  Track inspector table          │ │
-│  │  Preview frames      │       │  Metrics dashboard (4 charts)   │ │
-│  │  Run pipeline        │       │  Click-to-select tracks         │ │
-│  └──────────┬──────────┘       └──────────────┬───────────────────┘ │
-│             │                                  │                     │
-│             │  POST /api/upload                │  GET /data/...      │
-│             │  GET  /api/status/:id            │  (static files)     │
-│             │  GET  /api/datasets              │                     │
-└─────────────┼──────────────────────────────────┼─────────────────────┘
-              │                                  │
-              ▼                                  ▼
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────────────────────┐  │
+│  │  Upload   │  │   Tuning     │  │         Results              │  │
+│  │  Page     │  │   Page       │  │  Frame playback + controls   │  │
+│  │           │  │  Hyperparams │  │  Track inspector table       │  │
+│  │  Upload   │  │  Preview     │  │  Metrics dashboard (4 charts)│  │
+│  │  TIF      │  │  Run pipeline│  │  Click-to-select tracks      │  │
+│  └─────┬─────┘  └──────┬──────┘  └──────────────┬───────────────┘  │
+│        │               │                         │                  │
+│        │ POST /api/upload   POST /api/run        │ GET /data/...    │
+│        │ GET  /api/status   GET  /api/jobs       │ (static files)   │
+│        │ GET  /api/datasets                      │                  │
+└────────┼───────────────┼─────────────────────────┼──────────────────┘
+         │               │                         │
+         ▼               ▼                         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    EC2 Instance (35.179.135.58)                      │
+│                    EC2 Instance (18.170.61.114)                      │
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                      nginx (port 80)                         │   │
 │  │                                                              │   │
 │  │  /           → serve /home/ubuntu/frontend/ (SPA fallback)   │   │
-│  │  /data/      → serve /home/ubuntu/frontend/data/ (static)    │   │
-│  │  /api/*      → proxy to 127.0.0.1:8080 (Flask)              │   │
-│  │  *.js,css,…  → 1-day cache, immutable                       │   │
+│  │  /data/      → proxy to Flask (port 8080)                    │   │
+│  │  /api/*      → proxy to Flask (port 8080)                    │   │
+│  │  /assets/*   → 1-day cache, immutable                        │   │
+│  │  index.html  → no-cache (cache-busting)                      │   │
 │  │  client_max_body_size = 500M                                 │   │
 │  └─────────────────────────┬────────────────────────────────────┘   │
 │                            │                                        │
@@ -40,21 +41,19 @@ A web-based microscopy analysis tool that detects and tracks filamentous structu
 │  │         systemd service: upload-api                          │   │
 │  │         Python venv: /home/ubuntu/venv                       │   │
 │  │                                                              │   │
-│  │  POST /api/upload    → save TIF → spawn pipeline thread      │   │
-│  │  GET  /api/status/id → return job progress from memory       │   │
-│  │  GET  /api/datasets  → return datasets.json                  │   │
+│  │  POST /api/upload      → save TIF → split channels → dataset│   │
+│  │  POST /api/run         → run detection + stats pipeline      │   │
+│  │  GET  /api/jobs        → list active jobs (cross-device)     │   │
+│  │  GET  /api/status/:id  → poll job progress                   │   │
+│  │  GET  /api/datasets    → return dataset list                 │   │
+│  │  GET  /data/*          → serve dataset files (images, CSVs)  │   │
 │  └─────────────────────────┬────────────────────────────────────┘   │
 │                            │                                        │
 │                   (background thread)                               │
 │                            │                                        │
 │  ┌─────────────────────────▼────────────────────────────────────┐   │
-│  │         filament_detection.run_pipeline()                    │   │
-│  │         → subprocess with 600s timeout                       │   │
-│  └─────────────────────────┬────────────────────────────────────┘   │
-│                            │                                        │
-│  ┌─────────────────────────▼────────────────────────────────────┐   │
-│  │         export_for_frontend.export_dataset()                 │   │
-│  │         → subprocess with 300s timeout                       │   │
+│  │  src/biohack pipeline (imported directly, not subprocess)    │   │
+│  │    split_tiffs → image_detection → filament_statistics       │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -65,7 +64,7 @@ A web-based microscopy analysis tool that detects and tracks filamentous structu
 
 | Property | Value |
 |---|---|
-| Host | `35.179.135.58` |
+| Host | `18.170.61.114` |
 | OS | Ubuntu |
 | SSH key | `~/.ssh/HomeMBP.pem` |
 | User | `ubuntu` |
@@ -78,23 +77,35 @@ A web-based microscopy analysis tool that detects and tracks filamentous structu
 ├── frontend/                  # Built React app (rsync'd from dev machine)
 │   ├── index.html
 │   ├── assets/                # Vite-bundled JS/CSS
-│   └── data/                  # Dataset assets served as static files
-│       ├── datasets.json      # Dataset index
-│       └── dataset_NN/
-│           ├── raw/           # frame_000.png … frame_099.png
-│           ├── annotated/     # frame_000.png … frame_099.png (with overlays)
-│           ├── structure_measurements.csv
-│           └── track_summary.csv
-├── pipeline/                  # Pipeline code (filament_detection.py, export_for_frontend.py, upload_server.py)
-├── pipeline_output/           # Raw pipeline outputs per dataset
-│   └── <tif_stem>/
-│       ├── <stem>_filament_measurements.csv
-│       ├── <stem>_track_summary.csv
-│       └── <stem>_annotated.tif
-└── uploads/                   # Uploaded TIF files
+│   └── logo.png
+├── server/
+│   └── upload_server.py       # Flask API server
+├── src/
+│   └── biohack/               # Python pipeline package
+│       ├── constants.py
+│       ├── experiment_config.py
+│       ├── image_detection.py
+│       ├── filament_statistics.py
+│       ├── statistics_helper.py
+│       ├── split_tiffs.py
+│       └── utils.py
+├── server_data/               # Dataset storage (served as /data/)
+│   ├── datasets.json          # Dataset index
+│   └── <dataset_id>/
+│       ├── raw/               # frame_000.png … (brightfield frames)
+│       ├── masks/             # frame_000.png … (Cellpose masks)
+│       ├── diagnostics/       # frame_000.png … (annotated overlays)
+│       ├── cell_tracks.csv    # Per-frame per-cell tracking data
+│       ├── summary.json       # Run metadata (params, completed_at, run_name)
+│       └── *.csv              # Additional pipeline output CSVs
+├── server_uploads/            # Temporary upload staging
+├── server_originals/          # Original uploaded TIF files (kept for re-runs)
+└── venv/                      # Python virtual environment
 ```
 
 ### nginx Configuration
+
+Version-controlled at `server/nginx-frontend.conf`:
 
 ```nginx
 server {
@@ -111,20 +122,42 @@ server {
         proxy_read_timeout 600s;
     }
 
-    location / {
-        try_files $uri $uri/ /index.html;
+    location ~ ^/data/(.+\.zip)$ {
+        alias /home/ubuntu/server_data/$1;
+        default_type application/octet-stream;
+        add_header Content-Disposition "attachment";
+        add_header Cache-Control "no-cache";
     }
 
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location /data/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 60s;
+    }
+
+    location /assets/ {
         expires 1d;
         add_header Cache-Control "public, immutable";
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 }
 ```
 
-Config file: `/etc/nginx/sites-enabled/frontend`
+Config deployed to: `/etc/nginx/sites-enabled/frontend`
 
 ### systemd Service
+
+Version-controlled at `server/upload-api.service`:
 
 ```ini
 [Unit]
@@ -134,8 +167,8 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/pipeline
-ExecStart=/home/ubuntu/venv/bin/python3 upload_server.py
+WorkingDirectory=/home/ubuntu
+ExecStart=/home/ubuntu/venv/bin/python3 /home/ubuntu/server/upload_server.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -150,487 +183,451 @@ Logs: `journalctl -u upload-api -f`
 
 ## 3. Backend — Flask API
 
-**File:** `test/upload_server.py` (deployed to `/home/ubuntu/pipeline/upload_server.py`)
+**File:** `server/upload_server.py` (deployed to `/home/ubuntu/server/upload_server.py`)
 **Port:** 8080 (bound to `0.0.0.0`)
 
 ### Endpoints
 
 #### `POST /api/upload`
 
-Upload a TIF stack for processing.
+Upload a multi-channel TIF stack. The server splits it into per-frame PNGs and creates a dataset.
 
 **Request:** `multipart/form-data` with field `file`
 
 **Validation:**
 - File must be present and have a filename
 - Extension must be `.tif` or `.tiff`
-- File must be a valid TIFF image stack (verified with `tifffile`)
+- Duplicate name check: returns 409 if a dataset with the same display name already exists
 
 **Response (202):**
 ```json
-{ "job_id": "a1b2c3d4", "filename": "sample.tif" }
-```
-
-**Error (400):**
-```json
-{ "error": "No file part" | "No selected file" | "Only .tif/.tiff files accepted" | "Not a valid TIFF image" }
+{ "job_id": "a1b2c3d4" }
 ```
 
 **Side effects:**
-- Saves file to `/home/ubuntu/uploads/<safe_name>`
-- Starts background processing thread (see §4)
+- Saves file to `server_uploads/`
+- Starts background thread that splits channels with `split_tiffs.split_two_channel_time_stacks()`
+- Creates dataset directory under `server_data/` with `raw/` frames
+- Copies original TIF to `server_originals/` for re-runs
+- Appends new entry to `datasets.json`
 
-#### `GET /api/status/<job_id>`
+#### `POST /api/run`
 
-Poll processing status.
+Run the detection + statistics pipeline on an existing dataset.
+
+**Request:**
+```json
+{
+  "dataset_id": "ch20_ura7_ura8_001_crop_1",
+  "params": {
+    "gaussian_sigma": 1.5,
+    "frangi_sigmas": [1, 2, 3, 4, 5],
+    "run_name": "my experiment"
+  }
+}
+```
+
+**Response (202):**
+```json
+{ "job_id": "b5c6d7e8" }
+```
+
+**Side effects:**
+- Starts background thread running `_run_pipeline_job()`
+- Calls `image_detection.process_time_series_image()` for Frangi-based detection
+- Calls `filament_statistics.run_filament_pipeline()` for tracking + statistics
+- Generates diagnostic overlay images, CSVs, and `summary.json`
+
+#### `GET /api/jobs`
+
+Returns all currently-running jobs. Enables cross-device job discovery.
 
 **Response (200):**
 ```json
 {
-  "status": "queued" | "processing" | "complete" | "error",
+  "job_id_1": { "status": "processing", "step": "Detecting filaments...", "dataset_id": "..." },
+  "job_id_2": { "status": "processing", "step": "Computing statistics...", "dataset_id": "..." }
+}
+```
+
+#### `GET /api/status/<job_id>`
+
+Poll a specific job's status.
+
+**Response (200):**
+```json
+{
+  "status": "processing" | "complete" | "error",
   "step": "Running detection pipeline...",
-  "dataset_id": "dataset_03",
+  "dataset_id": "ch20_ura7_ura8_001_crop_1",
   "error": "Pipeline failed: ..."
 }
 ```
 
-Fields `step`, `dataset_id`, and `error` are present only when applicable.
-
-**Note:** Job state is held **in-memory** (Python dict). All job state is lost on server restart.
+**Note:** Job state is held **in-memory** (Python dict with a threading lock). All job state is lost on server restart.
 
 #### `GET /api/datasets`
 
-Returns the current dataset index.
+Returns the dataset list with result status.
 
 **Response (200):**
 ```json
 [
-  { "id": "dataset_01", "name": "ch20_URA7_URA8_001-crop1", "frames": 100, "timeSpan": "24h", "frameInterval": 14.4 }
+  {
+    "id": "ch20_ura7_ura8_001_crop_1",
+    "name": "Ch20 Ura7 Ura8 001 Crop 1",
+    "frames": 50,
+    "timeSpan": "12h 15m",
+    "has_results": true,
+    "run_name": "experiment 1",
+    "completed_at": "2026-03-22T01:14:36.270401+00:00"
+  }
 ]
 ```
 
+#### `DELETE /api/dataset/<dataset_id>`
+
+Delete a dataset and all its files.
+
+#### `PATCH /api/dataset/<dataset_id>/run-name`
+
+Update the run name for a dataset.
+
+#### `DELETE /api/dataset/<dataset_id>/results`
+
+Delete pipeline results while keeping the raw frames.
+
 #### `POST /api/dataset/<dataset_id>/download`
 
-Builds a ZIP archive for the selected dataset and returns it directly as an attachment response.
+Build and stream a ZIP archive of the dataset.
 
 **Request:**
 ```json
 { "mode": "results" | "all" }
 ```
 
-**Behavior:**
-- `results` includes `summary.json` plus dataset CSV outputs
-- `all` also includes `raw/`, `masks/`, and `diagnostics/` image folders
-- The ZIP is generated in a temporary file and streamed back in the same request
-- The frontend downloads the response body as a blob instead of opening a static `/data/...zip` URL in a new tab
+- `results`: summary.json + CSV outputs
+- `all`: also includes raw/, masks/, diagnostics/ image folders
 
-Reads from `/home/ubuntu/frontend/data/datasets.json`.
+#### `POST /api/checkout`
 
-### Background Processing Thread
+Create a Stripe Checkout session. Stripe keys are read from environment variables (`STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`).
 
-When a file is uploaded, a daemon thread runs the following steps sequentially:
+#### `GET /data/<path>`
+
+Serve static dataset files (images, CSVs) from `server_data/`.
+
+### Background Pipeline Thread
+
+When `/api/run` is called, a daemon thread runs `_run_pipeline_job()`:
 
 ```
-1. Update job status → "processing", step "Running detection pipeline..."
-2. subprocess.run() → filament_detection.run_pipeline(tif_path, output_dir, Config())
-   - Timeout: 600 seconds
-   - Runs in a separate Python process (imports from /home/ubuntu/pipeline/)
-3. Update job status → step "Exporting for frontend..."
-4. subprocess.run() → export_for_frontend.export_dataset(tif_path, output_dir, frontend_dir, dataset_id)
-   - Timeout: 300 seconds
-5. Fix file permissions: chmod -R o+rX on the frontend data directory
-6. Update datasets.json: append new entry with auto-incremented dataset_NN ID
-7. Update job status → "complete", with dataset_id
+1. Build ExperimentConfig from params via experiment_config_from_mapping()
+2. Run image_detection.process_time_series_image(raw_dir, config)
+   → Frangi-based filament detection per frame
+   → Produces per-frame masks and measurements
+3. Run filament_statistics.run_filament_pipeline(results_dir, config)
+   → Cell tracking, filament episode detection, lineage analysis
+   → Produces tracking CSVs + summary statistics
+4. Generate diagnostic overlay PNGs (diagnostics/ folder)
+5. Write summary.json with params, run_name, completed_at, frame count
+6. Update datasets.json
+7. Update job status → "complete"
 ```
 
-On any failure: job status → `"error"` with the exception message.
-
-**Dataset ID generation:** scans existing `dataset_*` directories under `/home/ubuntu/frontend/data/`, finds the highest number, increments by 1.
+On failure: job status → `"error"` with the exception message.
 
 ## 4. Detection Pipeline
 
-**File:** `test/filament_detection.py` (deployed to `/home/ubuntu/pipeline/filament_detection.py`)
+### Source Code
 
-### Input
+The pipeline lives in `src/biohack/` and is imported directly by the server (not run as a subprocess):
 
-- 100-frame grayscale TIF stack (128×128 px, uint16)
-- ~14.4 minutes between frames, covering a 24-hour time-lapse
+| Module | Purpose |
+|---|---|
+| `experiment_config.py` | `ExperimentConfig` dataclass + `experiment_config_from_mapping()` factory |
+| `image_detection.py` | `process_time_series_image()` — Frangi-based per-frame filament detection |
+| `filament_statistics.py` | `run_filament_pipeline()` — tracking, episodes, lineage, statistics |
+| `statistics_helper.py` | Helper functions: `build_filament_episodes()`, `filter_pillar_tracks_v3_aggressive()` |
+| `split_tiffs.py` | `split_two_channel_time_stacks()` — split multi-channel TIF into per-frame PNGs |
+| `constants.py` | Structured pipeline constants, frame-filename regex |
+| `utils.py` | YAML loading, image utilities |
+
+### ExperimentConfig (key parameters)
+
+| Category | Parameters |
+|---|---|
+| **Preprocessing** | `clip_low_percentile`, `clip_high_percentile`, `gaussian_sigma` |
+| **Frangi detection** | `frangi_sigmas`, `frangi_threshold_percentile`, `foreground_percentile` |
+| **Segmentation** | `local_block_size`, `local_offset`, `min_object_size`, `min_pixels_for_presence` |
+| **Cellpose** | `model_type_bf`, `model_type_gfp`, `diameter_bf`, `diameter_gfp`, `use_gpu` |
+| **Cell tracking** | `max_link_distance`, `min_overlap_fraction`, `bud_distance`, `bud_overlap_fraction` |
+| **Filament tracking** | `max_filament_gap` |
+| **Pillar filtering** | `remove_pillar_tracks`, `pillar_v3_*` parameters |
+| **Output** | `run_name`, `dataset_directory`, `results_directory`, `verbose`, `figure_dpi`, `cmap` |
 
 ### Pipeline Stages
 
 ```
-TIF Stack
+Multi-channel TIF Stack
   │
   ▼
-┌─────────────────────┐
-│ 1. Preprocessing     │  Load → min-max normalise per frame → Gaussian denoise
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 2. Hessian Tubeness  │  Multi-scale Hessian eigenvalue analysis
-│                      │  Tubeness = |λ₂| where λ₂ < 0, max across scales
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 3. LoG Blob Detect   │  skimage blob_log for round structures
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 4. Segmentation      │  Threshold tubeness (percentile/Otsu) + blob masks
-│                      │  Morphological closing → remove small objects → label
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 5. Classification    │  Three-gate filter per region:
-│    & Measurement     │    Gate 1: area ≥ min_area
-│                      │    Gate 2: cell exclusion (area + eccentricity)
-│                      │    Gate 3: intensity ≥ 2× background mean
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 6. Tracking          │  Greedy IoU matching → centroid fallback → new tracks
-│                      │  Gap tolerance, min track length filter
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 7. Output Metrics    │  structure_measurements.csv (per-frame)
-│                      │  track_summary.csv (per-track)
-└──────────┬──────────┘
-           ▼
-┌─────────────────────┐
-│ 8. Visualisation     │  Annotated RGB TIF with colour bounding boxes
-│                      │  Active structures plot, lifetime histogram
-└─────────────────────┘
+┌───────────────────────┐
+│ 1. Channel Splitting   │  split_tiffs → brightfield + GFP per-frame PNGs
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 2. Cell Segmentation   │  Cellpose on brightfield → cell masks
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 3. Frangi Detection    │  Multi-scale Frangi filter on GFP channel
+│                        │  → filament response map → threshold → label
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 4. Cell Tracking       │  IoU + centroid linking across frames
+│                        │  Bud detection + mother-daughter linking
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 5. Filament Episodes   │  Map filaments to cells, build episodes
+│                        │  Track appearance/disappearance per cell
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 6. Statistics          │  Per-cell, per-filament-episode summaries
+│    & Lineage           │  Cell lineage table, pillar track filtering
+└───────────┬───────────┘
+            ▼
+┌───────────────────────┐
+│ 7. Diagnostic Output   │  Overlay PNGs, tracking CSVs, summary.json
+└───────────────────────┘
 ```
 
-### Config Dataclass (17 parameters)
+### Pipeline Outputs (per dataset)
 
-| Parameter | Default | Purpose |
-|---|---|---|
-| `gaussian_sigma` | 1.0 | Gaussian blur sigma for denoising |
-| `hessian_sigmas` | [1.5, 2.0, 3.0, 4.0, 5.0] | Scales for Hessian tubeness |
-| `blob_min_sigma` | 2.0 | LoG blob detector min sigma |
-| `blob_max_sigma` | 6.0 | LoG blob detector max sigma |
-| `blob_threshold` | 0.02 | LoG blob detection threshold |
-| `threshold_method` | `"percentile"` | Segmentation method (`"otsu"` or `"percentile"`) |
-| `threshold_percentile` | 90 | Percentile for segmentation threshold |
-| `min_area` | 30 | Minimum object area (pixels) |
-| `closing_radius` | 1 | Morphological closing disk radius |
-| `cell_min_area` | 200 | Cell exclusion: min area to flag as cell |
-| `cell_max_eccentricity` | 0.6 | Cell exclusion: max eccentricity |
-| `max_area` | 350 | Hard cap — anything larger is a cell |
-| `intensity_threshold` | 2.0 | Structure/background intensity ratio gate |
-| `iou_threshold` | 0.3 | Tracking IoU threshold |
-| `max_centroid_dist` | 15.0 | Tracking centroid distance fallback |
-| `gap_frames` | 1 | Tracking gap tolerance (frames) |
-| `min_track_length` | 2 | Minimum track duration to keep |
-| `frame_interval_min` | 14.4 | Minutes per frame (for time conversion) |
-
-### Pipeline Outputs
-
-| File | Description |
+| File/Directory | Description |
 |---|---|
-| `<stem>_filament_measurements.csv` | Per-frame per-structure rows with geometry, intensity, morphology |
-| `<stem>_track_summary.csv` | Per-track aggregated stats |
-| `<stem>_annotated.tif` | RGB TIF with colour-coded bounding boxes |
-| `<stem>_active_structures.png` | Active structure count over time |
-| `<stem>_lifetime_hist.png` | Track lifetime histogram |
-| `length_over_time.png` | Filament length over time |
+| `raw/frame_NNN.png` | Brightfield frames (grayscale PNG) |
+| `masks/frame_NNN.png` | Cellpose segmentation masks |
+| `diagnostics/frame_NNN.png` | Annotated overlays with detections |
+| `cell_tracks.csv` | Per-frame per-cell tracking data with filament columns |
+| `filament_episodes.csv` | Filament appearance episodes per cell |
+| `filament_episodes_with_lineage.csv` | Episodes with mother cell lineage |
+| `filaments_per_frame.csv` | Frame-level filament counts |
+| `summary.json` | Run metadata: params, timestamps, frame count |
 
-### Invocation
+## 5. Frontend
 
-```python
-from filament_detection import run_pipeline, Config
+**Stack:** React 19, Vite 6, Tailwind CSS 4, Recharts, PapaParse
+**Source:** `frontend/`
+**Build:** `cd frontend && npx vite build` → `frontend/dist/`
 
-cfg = Config(gaussian_sigma=1.5, min_area=50)
-measurements_df, track_summary_df = run_pipeline("input.tif", "output/", cfg)
-```
-
-CLI: `python filament_detection.py <data_dir> [-o output_dir]`
-
-## 5. Export Script
-
-**File:** `test/export_for_frontend.py` (deployed to `/home/ubuntu/pipeline/export_for_frontend.py`)
-
-Converts raw pipeline outputs into the directory structure the frontend expects.
-
-### Processing Steps
-
-```
-Pipeline Output                          Frontend Data
-─────────────────                        ──────────────
-source.tif                    ──►  dataset_NN/raw/frame_000.png … frame_099.png
-                                   (normalised to 0-255, grayscale PNG)
-
-<stem>_annotated.tif          ──►  dataset_NN/annotated/frame_000.png … frame_099.png
-                                   (RGB PNG per frame)
-
-<stem>_filament_measurements  ──►  dataset_NN/structure_measurements.csv
-                                   (column renames: major_axis_length → major_axis, etc.)
-
-<stem>_track_summary.csv      ──►  dataset_NN/track_summary.csv
-                                   (+ computed morphology fields)
-```
-
-### Column Renames (Measurements)
-
-| Pipeline Column | Frontend Column |
-|---|---|
-| `major_axis_length` | `major_axis` |
-| `minor_axis_length` | `minor_axis` |
-| `orientation_deg` | `orientation` |
-| `area_px` | `area` |
-
-### Computed Fields (Track Summary)
-
-| Field | Derivation |
-|---|---|
-| `initial_morphology` | Morphology at formation frame |
-| `final_morphology` | Morphology at dissolution frame |
-| `morphology_label` | `"filament"`, `"condensate"`, or `"mixed"` |
-| `num_transitions` | Count of morphology changes across track lifetime |
-
-## 6. Frontend
-
-**Stack:** React 19, Vite 6, Tailwind CSS 3, Recharts, PapaParse
-**Source:** `test/frontend/`
-**Build:** `npx vite build` → `dist/`
-**Deploy:** `rsync -avz --delete dist/ ubuntu@35.179.135.58:/home/ubuntu/frontend/ -e "ssh -i ~/.ssh/HomeMBP.pem"`
-
-### Two-Page Architecture
+### Three-Page Architecture
 
 ```
 App.jsx (shell)
-├── Header: logo + title + nav tabs [Process | Results]
-├── Shared state: datasets[], currentDataset, page
+├── Header: logo + title + nav tabs [Upload | Tuning | Results]
+├── Shared state: datasets[], currentDataset, pipelineJobs, page
 │
-├── ProcessPage.jsx
-│   ├── Left: upload zone, dataset selector, frame preview + scrubber
-│   └── Right: HyperparamPanel + "Run Pipeline" button
+├── UploadPage.jsx
+│   ├── Upload zone (drag & drop .tif/.tiff)
+│   ├── Dataset list with delete (double-click confirm)
+│   └── Pipeline run results list with delete
+│
+├── TuningPage.jsx
+│   ├── Left (42%): frame preview with scrubber (raw/mask/diagnostic views)
+│   └── Right (58%): HyperparamPanel + "Run Pipeline" button
+│       └── Run button disabled while pipeline is running
 │
 └── ResultsPage.jsx
     ├── Left (42%): frame player with full playback controls
     └── Right (58%):
-        ├── TrackInspector.jsx (45%): sortable track table + detail panel
-        └── MetricsDashboard.jsx (55%): 2×2 chart grid
+        ├── TrackInspector.jsx: sortable track table + detail panel
+        └── MetricsDashboard.jsx: 2×2 chart grid
 ```
 
 ### Source Files
 
 | File | Purpose |
 |---|---|
-| `src/App.jsx` | Shell — shared dataset state, header with nav tabs, page routing |
-| `src/ProcessPage.jsx` | Upload, preview, hyperparameter adjustment, pipeline trigger |
-| `src/ResultsPage.jsx` | Playback, track selection, inspector, metrics |
-| `src/TrackInspector.jsx` | Sortable track table, selected track detail with sparklines |
-| `src/MetricsDashboard.jsx` | 2×2 chart grid (length, count, eccentricity, axes) |
-| `src/HyperparamPanel.jsx` | Parameter sliders, numeric inputs, portal-rendered tooltips |
-| `src/data.js` | Data loading, frame URLs, track colours, upload/poll API calls |
-| `src/main.jsx` | React entry point |
-| `src/index.css` | Tailwind directives |
+| `App.jsx` | Shell — shared state, header with nav tabs, pipeline job management, cross-device job discovery |
+| `UploadPage.jsx` | Upload zone, dataset list, run list, double-click delete confirmation |
+| `TuningPage.jsx` | Frame preview with view modes, hyperparameter panel, pipeline trigger |
+| `ResultsPage.jsx` | Playback, track selection, inspector, metrics |
+| `TrackInspector.jsx` | Sortable track table, selected track detail with sparklines |
+| `MetricsDashboard.jsx` | 2×2 chart grid (length, count, eccentricity, axes), 1-indexed frames |
+| `HyperparamPanel.jsx` | Parameter sliders/inputs with tooltips, exposes values via ref |
+| `PricingModal.jsx` | Stripe pricing modal with checkout flow |
+| `data.js` | API helpers, data loading, frame URLs, track colours, constants |
+| `main.jsx` | React entry point |
+| `index.css` | Tailwind directives |
 
-### Data Loading (Static Files)
+### Job Management
 
-All dataset viewing is done via static file fetches — no backend needed:
+Pipeline jobs support concurrent runs and cross-device visibility:
 
-- `GET /data/datasets.json` → dataset index
-- `GET /data/dataset_NN/structure_measurements.csv` → parsed with PapaParse
-- `GET /data/dataset_NN/track_summary.csv` → parsed with PapaParse
-- `GET /data/dataset_NN/{raw|annotated}/frame_NNN.png` → frame images
+- **Client-side:** `pipelineJobs` state persisted to `sessionStorage` (survives tab refresh)
+- **Server-side:** In-memory `_jobs` dict with thread-safe lock
+- **Cross-device discovery:** On mount, frontend calls `GET /api/jobs` to discover running jobs from other devices/tabs
+- **Polling:** 2-second intervals per active job via `GET /api/status/<job_id>`
+- **Duplicate prevention:** Only one pipeline run per dataset at a time
 
-All 200 frames (100 raw + 100 annotated) are preloaded on dataset switch.
+### Data Loading
 
-### Upload Flow (Current Implementation)
+Dataset viewing uses static file fetches served by Flask:
+
+- `GET /data/<dataset_id>/summary.json` → run metadata
+- `GET /data/<dataset_id>/cell_tracks.csv` → parsed with PapaParse
+- `GET /data/<dataset_id>/{raw|masks|diagnostics}/frame_NNN.png` → frame images
+
+Frame images are preloaded on dataset switch for all three view modes.
+
+### Upload Flow
 
 ```
 User drags .tif onto upload zone
          │
          ▼
-ProcessPage validates extension (.tif/.tiff)
+UploadPage validates extension (.tif/.tiff)
          │
          ▼
 POST /api/upload (FormData with file)
          │
-         ▼
-Server saves to /home/ubuntu/uploads/, returns { job_id }
+         ├── 409: duplicate name → show error
          │
          ▼
-ProcessPage polls GET /api/status/{job_id} every 2 seconds
+Server saves, splits channels, returns { job_id }
+         │
+         ▼
+UploadPage polls GET /api/status/{job_id} every 2 seconds
          │
          ├── status: "processing"  → show step text in UI
          ├── status: "error"       → show error, stop polling
          └── status: "complete"    → refresh dataset list,
-                                     select new dataset,
-                                     enable annotated view
+                                     select new dataset
 ```
 
-## 7. Current Gaps & TODOs
+### Pipeline Run Flow
 
-### "Run Pipeline" Button — Not Yet Wired
-
-The "Run Pipeline" button on the Process page is a **placeholder stub**:
-
-```jsx
-onClick={() => {/* TODO: POST hyperparams to backend and re-run pipeline */}}
+```
+User adjusts hyperparams on Tuning page → clicks "Run Pipeline"
+         │
+         ▼
+POST /api/run { dataset_id, params }
+         │
+         ▼
+Server returns { job_id }, starts background thread
+         │
+         ▼
+App.jsx adds to pipelineJobs, starts 2s polling
+         │
+         ├── On other devices: GET /api/jobs discovers the running job
+         │
+         ├── status: "processing"  → show step text, disable Run button
+         ├── status: "error"       → show error, auto-clear after 5s
+         └── status: "complete"    → refresh datasets, auto-clear after 5s
 ```
 
-To make it functional, the following work is needed:
-
-#### Frontend Changes
-
-1. **HyperparamPanel must expose its values** — currently all parameter state is local to the component via `useState`. The parent (`ProcessPage`) cannot read the values. Options:
-   - Lift state up: pass `values` and `onChange` props
-   - Use `useImperativeHandle` + `forwardRef` to expose a `getValues()` method
-   - Use React Context
-
-2. **ProcessPage must POST hyperparams** — the "Run Pipeline" button should call a new API endpoint with the current hyperparameter values and the selected dataset ID.
-
-3. **Poll for completion** — reuse the existing polling pattern from the upload flow.
-
-#### Backend Changes
-
-1. **New endpoint: `POST /api/run`** — accepts a JSON body with dataset ID and hyperparameters, triggers re-processing of an existing dataset.
-
-   Proposed schema:
-   ```json
-   POST /api/run
-   {
-     "dataset_id": "dataset_01",
-     "params": {
-       "gaussian_sigma": 1.5,
-       "min_area": 50,
-       ...
-     }
-   }
-   ```
-   Response: `{ "job_id": "..." }` — same polling pattern as upload.
-
-2. **Map frontend params to pipeline Config** — the HyperparamPanel exposes 9 parameters from `image_detection.yaml` (Frangi-based). The actual pipeline `Config` has 17 parameters (Hessian-based). These are **different parameter sets** from different pipeline versions. Decision needed:
-   - Option A: Update HyperparamPanel to expose the actual `Config` parameters
-   - Option B: Update the pipeline to accept the `image_detection.yaml` parameters
-   - Option C: Map between the two where possible, ignore the rest
-
-3. **Re-processing logic** — the run endpoint would:
-   - Look up the original TIF from the uploads directory (or store a mapping)
-   - Run `filament_detection.run_pipeline()` with custom `Config`
-   - Run `export_for_frontend.export_dataset()` to overwrite the dataset's frontend files
-   - Update job status as complete
-
-### Parameter Mismatch Detail
-
-| HyperparamPanel (from `image_detection.yaml`) | Pipeline Config (from `filament_detection.py`) |
-|---|---|
-| `clip_low_percentile` | — (not in Config) |
-| `clip_high_percentile` | — (not in Config) |
-| `gaussian_sigma` | `gaussian_sigma` ✓ |
-| `foreground_percentile` | — (not in Config) |
-| `local_block_size` | — (not in Config) |
-| `local_offset` | — (not in Config) |
-| `frangi_threshold_percentile` | — (not in Config; uses Hessian, not Frangi) |
-| `min_object_size` | `min_area` (similar purpose) |
-| `min_pixels_for_presence` | — (not in Config) |
-| — | `hessian_sigmas` (not in panel) |
-| — | `blob_min_sigma` (not in panel) |
-| — | `blob_max_sigma` (not in panel) |
-| — | `blob_threshold` (not in panel) |
-| — | `threshold_method` (not in panel) |
-| — | `threshold_percentile` (not in panel) |
-| — | `closing_radius` (not in panel) |
-| — | `cell_min_area` (not in panel) |
-| — | `cell_max_eccentricity` (not in panel) |
-| — | `max_area` (not in panel) |
-| — | `intensity_threshold` (not in panel) |
-| — | `iou_threshold` (not in panel) |
-| — | `max_centroid_dist` (not in panel) |
-| — | `gap_frames` (not in panel) |
-| — | `min_track_length` (not in panel) |
-
-**Root cause:** `image_detection.yaml` was written for an earlier Frangi-based pipeline (`src/biohack/image_detection.py`, which is now a stub). The current pipeline (`test/filament_detection.py`) uses a Hessian-based approach with a different parameter set.
-
-### Other Gaps
-
-| Gap | Impact | Priority |
-|---|---|---|
-| Job state is in-memory only | Lost on server restart | Medium |
-| No authentication on API endpoints | Anyone can upload/trigger processing | Low (internal tool) |
-| Missing deps in `pyproject.toml` | `scipy`, `pandas`, `tifffile`, `flask` not declared | Low |
-| nginx config not version-controlled | Manual server setup required | Low |
-| No HTTPS | Traffic unencrypted | Low (internal tool) |
-| Upload file size only limited by nginx (500MB) | No server-side validation of file size | Low |
-
-## 8. Data Flow Summary
+## 6. Data Flow Summary
 
 ```
                     Upload
                       │
-  .tif file ──POST──► Flask API ──save──► /home/ubuntu/uploads/
+  .tif file ──POST──► Flask API ──save──► server_uploads/
                       │
                       │ (background thread)
                       ▼
-              filament_detection.run_pipeline()
+              split_tiffs.split_two_channel_time_stacks()
                       │
                       │ outputs:
-                      │  • *_filament_measurements.csv
-                      │  • *_track_summary.csv
-                      │  • *_annotated.tif
+                      │  • raw/frame_NNN.png (brightfield)
+                      │  • GFP frames for detection
                       ▼
-              export_for_frontend.export_dataset()
+              server_data/<dataset_id>/
+                      │
+                    Run Pipeline
+                      │
+  params ────POST───► Flask API ──► background thread
+                      │
+                      ▼
+              image_detection.process_time_series_image()
+                      │
+                      │ outputs: masks, filament measurements
+                      ▼
+              filament_statistics.run_filament_pipeline()
                       │
                       │ outputs:
-                      │  • raw/frame_NNN.png (100 frames)
-                      │  • annotated/frame_NNN.png (100 frames)
-                      │  • structure_measurements.csv
-                      │  • track_summary.csv
+                      │  • masks/frame_NNN.png
+                      │  • diagnostics/frame_NNN.png
+                      │  • cell_tracks.csv
+                      │  • filament_episodes*.csv
+                      │  • summary.json
                       ▼
-              /home/ubuntu/frontend/data/dataset_NN/
+              server_data/<dataset_id>/
                       │
-                      │ served by nginx as static files
+                      │ served by Flask as /data/<dataset_id>/...
                       ▼
-              Browser fetches /data/dataset_NN/...
+              Browser fetches /data/<dataset_id>/...
                       │
                       │ PapaParse CSVs, preload PNGs
                       ▼
               React renders playback + charts + tracks
 ```
 
-## 9. Development & Deployment
+## 7. Development & Deployment
 
 ### Local Development
 
 ```bash
 # Frontend dev server
-cd test/frontend
+cd frontend
 npm install
 npx vite          # http://localhost:5173
 
-# Pipeline (test locally)
-cd test
-python filament_detection.py ../data/ -o output/
-python export_for_frontend.py   # exports to frontend/public/data/
+# Run pipeline locally
+.venv/bin/python scripts/example.py
 ```
 
 ### Build & Deploy
 
 ```bash
 # Build frontend
-cd test/frontend
+cd frontend
 npx vite build
 
-# Deploy to EC2
-rsync -avz --delete dist/ ubuntu@35.179.135.58:/home/ubuntu/frontend/ \
+# Deploy frontend to EC2
+rsync -avz --delete --exclude='data/' frontend/dist/ \
+  ubuntu@18.170.61.114:/home/ubuntu/frontend/ \
   -e "ssh -i ~/.ssh/HomeMBP.pem"
+
+# Deploy server
+scp -i ~/.ssh/HomeMBP.pem server/upload_server.py \
+  ubuntu@18.170.61.114:/home/ubuntu/server/upload_server.py
 
 # Deploy pipeline code
-rsync -avz test/{filament_detection.py,export_for_frontend.py,upload_server.py} \
-  ubuntu@35.179.135.58:/home/ubuntu/pipeline/ \
-  -e "ssh -i ~/.ssh/HomeMBP.pem"
+rsync -avz -e "ssh -i ~/.ssh/HomeMBP.pem" \
+  src/biohack/ ubuntu@18.170.61.114:/home/ubuntu/src/biohack/
 
-# Restart API after pipeline changes
-ssh -i ~/.ssh/HomeMBP.pem ubuntu@35.179.135.58 \
+# Restart API after changes
+ssh -i ~/.ssh/HomeMBP.pem ubuntu@18.170.61.114 \
   "sudo systemctl restart upload-api"
 ```
 
 ### Git
 
-- Branch: `kparmesar/frontend`
-- Pipeline + export code are in `test/` (not `src/biohack/` — that's the original stub)
+- Branch: `frontend` — UI + server + pipeline changes
+- Branch: `fear/dbscan-detection` — base pipeline work
+- Pipeline code: `src/biohack/`
+- Server code: `server/`
+- Frontend code: `frontend/`
+
+## 8. Known Gaps
+
+| Gap | Impact | Priority |
+|---|---|---|
+| Job state is in-memory only | Lost on server restart | Medium |
+| No authentication on API endpoints | Anyone can upload/trigger processing | Low (internal tool) |
+| No HTTPS | Traffic unencrypted | Low (internal tool) |
+| Stripe keys via env vars only | Must be set on server | Low |
