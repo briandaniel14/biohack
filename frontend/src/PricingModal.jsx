@@ -43,7 +43,7 @@ export default function PricingModal({ open, onClose }) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full mx-4 overflow-hidden">
+      <div className="relative bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full mx-4 overflow-y-auto max-h-[90vh]">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -110,7 +110,7 @@ export default function PricingModal({ open, onClose }) {
             <button
               onClick={handleUpgrade}
               disabled={loading}
-              className="mt-6 w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="mt-6 w-full py-2.5 rounded-lg bg-gray-500 hover:bg-gray-400 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Redirecting...</>
