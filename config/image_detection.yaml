@@ -31,9 +31,9 @@ figure_dpi: 140
 cmap: "gray"
 
 # Required for batch runs: parent folder containing ``brightfield/`` and ``gfp/`` frame trees.
-dataset_directory: "data/separated_frames"
+dataset_directory: "data/live/splitted"
 # Runs are written to ``<results_directory>/<run_uuid>/`` (filament_mask/, diagnostics/, copies of bf/gfp).
-results_directory: "temp/results"
+results_directory: "outputs"
 
 verbose: true
 max_workers: 6
