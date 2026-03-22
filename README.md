@@ -8,7 +8,7 @@ CellPose was used to create cell masks. Visual processing was used to mask filam
 
 ## Use of LLMs:
 
-Claude was extensively used to generate code for website UI. ChatGTP assisted with CellPose coding. 
+Claude was extensively used to generate code for website UI. ChatGPT assisted with CellPose coding. 
 
 ## Setup: 
 
